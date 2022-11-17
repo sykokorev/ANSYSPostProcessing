@@ -1,4 +1,5 @@
 import re
+import os
 
 
 def get_domains(outfile: str) -> dict:
@@ -26,5 +27,11 @@ def get_domains(outfile: str) -> dict:
     return domains
             
 
-def get_interfaces(domain: str) -> list:
-    pass
+def get_files(ext: str, directory: str) -> list:
+    
+    files = []
+    for file in os.listdir(directory):
+        if file.endswith(f'.{ext}'):
+            files.append(os.path.join(directory, file))
+    
+    return files

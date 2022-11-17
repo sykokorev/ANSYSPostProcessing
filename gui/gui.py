@@ -2,14 +2,33 @@ from PySide6.QtWidgets import (
     QMainWindow, QGridLayout,
     QWidget, QTabWidget, QLabel,
     QLineEdit, QComboBox, QListWidget,
-    QListWidgetItem, QListView, QTabWidget,
-    QLayout, QVBoxLayout, QHBoxLayout
+    QListWidgetItem, QTabWidget,
+    QLayout, QVBoxLayout, QHBoxLayout,
+    QButtonGroup, QPushButton, QFileDialog
 )
 from PySide6.QtCore import Qt, QRect, QSize, QPoint
 from PySide6.QtGui import QFont
 
 
-FONT = ['Calibri', 14]
+from utils.consts import FONT
+from utils.parse_out import *
+
+
+
+def clicked(btn, func):
+    btn.clicked.connect(func)
+
+
+def pressed(btn, func):
+    btn.pressed.connect(func)
+
+
+def released(btn, func):
+    btn.released.connect(func)
+
+
+def toggled(btn, func):
+    btn.toggled.connect(func)
 
 
 class Label(QLabel):
@@ -77,9 +96,9 @@ class TabWidget(QTabWidget):
                 self.addTab(w, tab)
 
 
-class GriDLayout(QGridLayout):
+class GridLayout(QGridLayout):
     def __init__(self, widgets: list, **settings):
-        super(GriDLayout, self).__init__()
+        super(GridLayout, self).__init__()
 
         hspace = settings.get('hspace', 30)
         vspace = settings.get('vspace', 30)
@@ -111,13 +130,69 @@ class GriDLayout(QGridLayout):
             self.setColumnStretch(*col)
         for row in row_stretch:
             self.setRowStretch(*row)
+
+
+class ButtonGroup(QButtonGroup):
+    def __init__(self, buttons: list):
+        super(ButtonGroup, self).__init__()
         
+        for btn in buttons:
+            self.addButton(btn)
+
+
+class PushButton(QPushButton):
+    def __init__(self, **settings):
+        super(PushButton, self).__init__()
+
+        signal_map = {
+            'clicked': clicked,
+            'pressed': pressed,
+            'released': released,
+            'toggled': toggled
+        }
+
+        text = settings.get('text', 'Push Me!')
+        checkable = settings.get('checkable', True)
+        shortcut = settings.get('shortcut', None)
+        signals = settings.get('signals', None)
+        font = settings.get('font', FONT)
+
+        self.setText(text)
+        self.setCheckable(checkable)
+        self.setFont(QFont(*font))
+        
+        if shortcut:
+            self.setShortcut(shortcut)
+
+        if signals:
+            for signal in signals:
+                signal_map[signal[0]].__call__(self, signal[1])
+
+
+class FileDialog(QFileDialog):
+    def __init__(self, **settings):
+        super(FileDialog, self).__init__()
+
+        signal_map = {
+            'directoryEntered': self.dire
+        }
+
+        self.filters = settings.get('filter', None)
+
+    def open_directory(self):
+        self.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
+        self.setOption(QFileDialog.Option.ShowDirsOnly)
+        return self.getExistingDirectory()
+    
 
 class MainWindow(QMainWindow):
 
     def __init__(self, **kwargs):
         
         super().__init__()
+
+        empty = QWidget()
+
         size = kwargs.get('size', [1280, 720])
         title = kwargs.get('Title', '')
         self.setWindowTitle(title)
@@ -125,17 +200,33 @@ class MainWindow(QMainWindow):
         self.domains = kwargs.get('domains')
         self.domain_layout = self.domainsUI()
 
+        self.turbosurface_layout = self.turbosurfaceUI()
+        self.main_layout = QGridLayout()
+
+        self.buttons = self.controlButtonUI()
+        self.buttons_layout = GridLayout(
+            widgets=[
+                *[['widget', btn, [row, 0]] for row, btn in enumerate(self.buttons.buttons())],
+                ['widget', empty, [len(self.buttons.buttons()), 0]]
+            ]
+        )
+        self.res_file_directory = None
+
         tabs = {
             'Settings': self.domain_layout,
-            'Turbo Surfaces': QWidget(),
+            'Turbo Surfaces': self.turbosurface_layout,
+            'Planes': QWidget(),
             'Images': QWidget(),
             'Report': QWidget(),
             'Presentation': QWidget()
         }
-
         self.tab_widget = TabWidget(tabs=tabs)
-        self.turbosurface_layout = self.turbosurfaceUI()
-        self.setCentralWidget(self.tab_widget)
+
+        self.main_layout.addWidget(self.tab_widget, 0, 0)
+        self.main_layout.addLayout(self.buttons_layout, 0, 1)
+        self.main_widget = QWidget()
+        self.main_widget.setLayout(self.main_layout)
+        self.setCentralWidget(self.main_widget)
 
 
     def domainsUI(self):
@@ -160,13 +251,28 @@ class MainWindow(QMainWindow):
             'hspace': 30, 'vspace':10, 'rect': [2, 2, 200, 200],
             'col_stretch': [[3, 1]], 'row_stretch': [[3, 1]]
         }
-        domainUIGridLayout = GriDLayout(widgets=widgets, **settings)
+        domainUIGridLayout = GridLayout(widgets=widgets, **settings)
 
         return domainUIGridLayout
 
     def turbosurfaceUI(self):
-        ts_layout = QGridLayout()
+        widget = QWidget()
+        ts_layout = GridLayout(widgets=[['widget', widget, [0, 0]]])
+        return ts_layout
 
+    def controlButtonUI(self):
+        btn_settings = [
+            {'text': 'Open Directory', 'signals': [['clicked', self.open_directory]]},
+            {'text': 'Save to ...', 'signals': [['clicked', self.save_as]]},
+            {'text': 'Save template', 'signals': [['clicked', self.save_template]]}
+        ]
+        buttons = []
+        for btn in btn_settings:
+            buttons.append(PushButton(**btn))
+
+        qbtns = ButtonGroup(buttons=buttons)
+
+        return qbtns
 
     def domain_activated(self, idx):
         current_domain = list(self.domains.keys())[idx]
@@ -177,3 +283,13 @@ class MainWindow(QMainWindow):
 
     def interface_activate(self, item):
         return item.text()
+
+    def open_directory(self):
+        open_dir = FileDialog()
+        self.res_file_directory = open_dir.open_directory()
+
+    def save_as(self):
+        pass
+
+    def save_template(self):
+        pass

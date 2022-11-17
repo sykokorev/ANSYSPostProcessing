@@ -1,4 +1,5 @@
 import os
+import ctypes
 
 from PySide6.QtWidgets import QApplication
 
@@ -13,9 +14,14 @@ FILE = os.path.join(DIRECROTY, OUTFILE)
 if __name__ == "__main__":
 
     domains = get_domains(outfile=FILE)
+    user32 = ctypes.windll.user32
+    screensize = user32.GetSystemMetrics(0)/2, user32.GetSystemMetrics(1)/2
 
     app = QApplication()
-    window = MainWindow(domains=domains, title='ANSYS Post Processing', size=[1280, 720])
+    window = MainWindow(domains=domains, title='ANSYS Post Processing', size=screensize)
+    
+    res_file_directory = window.res_file_directory
+    print(res_file_directory)
 
     window.show()
     app.exec()
