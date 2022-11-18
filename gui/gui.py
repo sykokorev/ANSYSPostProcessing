@@ -4,13 +4,15 @@ from PySide6.QtWidgets import (
     QLineEdit, QComboBox, QListWidget,
     QListWidgetItem, QTabWidget,
     QLayout, QVBoxLayout, QHBoxLayout,
-    QButtonGroup, QPushButton, QFileDialog
+    QButtonGroup, QPushButton, QFileDialog,
+    QDialog, QMessageBox, QMenu
 )
-from PySide6.QtCore import Qt, QRect, QSize, QPoint
-from PySide6.QtGui import QFont
+from PySide6.QtCore import (
+    Qt, QRect, QSize, QEvent, QObject
+)
+from PySide6.QtGui import QFont, QMouseEvent, QContextMenuEvent, QAction
 
-
-from utils.consts import FONT
+from utils.consts import FONT, MSG_FONT
 from utils.parse_out import *
 
 
@@ -31,6 +33,34 @@ def toggled(btn, func):
     btn.toggled.connect(func)
 
 
+class Dialog(QDialog):
+    def __init__(self, actions: dict, parent=None):
+        super(Dialog, self).__init__()
+        self.actions_ = None
+
+    def eventFilter(self, source: QObject, event: QEvent) -> bool:
+        if event == QEvent.ContextMenu and source in (QListWidget):
+            menu = QMenu()
+            for text, action in self.actions_.items():
+                menu.addAction(text)
+                if menu.exec(event.globalPos()):
+                    item = source.itemAt(event.pos())
+                    print(item.text)
+            return True
+
+        return super().eventFilter(source, event)
+
+    def set_action(self, actions):
+        self.action = actions
+
+
+class Menu(QMenu):
+    def __init__(self, actions):
+        super(Menu, self).__init__()
+        for action in actions:
+            self.addAction(action)
+
+
 class Label(QLabel):
     def __init__(self, text: str, geometry: list, alignment: 
                         Qt.AlignmentFlag=[Qt.AlignHCenter, Qt.AlignVCenter], **kwargs):
@@ -48,34 +78,45 @@ class Label(QLabel):
 
 
 class ComboBox(QComboBox):
-    def __init__(self, items: list, geometry: list, alignment: Qt.AlignmentFlag=Qt.AlignCenter, **kwargs):
+    def __init__(self, geometry: list, **kwargs):
         super(ComboBox, self).__init__()
 
         font = kwargs.get('font', FONT)
         qfont = QFont(*font)
-
-        self.addItems(items)
         size = QSize(*geometry)
         self.setFixedSize(size)
         self.setFont(qfont)
 
+    def set_items(self, items: list):
+        if hasattr(items, '__iter__'):
+            self.addItems(items)
+
 
 class ListWidget(QListWidget):
-    def __init__(self, items: list, geometry: list, alignment: Qt.AlignmentFlag=Qt.AlignLeft, **kwargs):
+    def __init__(self, geometry: list, **kwargs):
         super(ListWidget, self).__init__()
 
         font = kwargs.get('font', FONT)
         qfont = QFont(*font)
+        alignment = kwargs.get('alignment', Qt.AlignLeft)
 
         self.setItemAlignment(alignment)
-        for i, item in enumerate(items):
-            qitem = QListWidgetItem(item)
-            self.insertItem(i, qitem)
-            
-
         size = QSize(*geometry)
         self.setFixedSize(size)
         self.setFont(qfont)
+        self.context_menu = None
+        self.actions_ = kwargs.get('actions')
+
+    def set_items(self, items: list):
+        if hasattr(items, '__iter__'):
+            self.addItems(items)
+
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        if self.actions_:
+            print(self.actions_)
+            self.context_menu = Menu(actions=self.actions_)
+            
+        return super().contextMenuEvent(event)
 
 
 class TabWidget(QTabWidget):
@@ -173,17 +214,42 @@ class FileDialog(QFileDialog):
     def __init__(self, **settings):
         super(FileDialog, self).__init__()
 
-        signal_map = {
-            'directoryEntered': self.dire
-        }
-
         self.filters = settings.get('filter', None)
 
     def open_directory(self):
         self.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
         self.setOption(QFileDialog.Option.ShowDirsOnly)
         return self.getExistingDirectory()
-    
+
+
+class MessageBox(QMessageBox):
+    def __init__(self, **kwargs):
+        super(MessageBox, self).__init__()
+
+        detail = kwargs.get('detail', None)
+        information = kwargs.get('information', None)
+        title = kwargs.get('title', 'Information')
+        buttons = kwargs.get('buttons', None)
+        font = kwargs.get('font', MSG_FONT)
+
+        self.setFont(QFont(*font))
+
+        if detail:
+            self.setDetailedText(detail)
+        if not information:
+            self.setInformativeText('Information')
+        else:
+            self.setInformativeText(information)
+
+        self.setWindowTitle(title)
+
+        if not buttons:
+            self.setStandardButtons(QMessageBox.StandardButton.Ok)
+        else:
+            for text, btn in buttons.items():
+                self.addButton(btn)
+                btn.setText(text)
+
 
 class MainWindow(QMainWindow):
 
@@ -197,8 +263,9 @@ class MainWindow(QMainWindow):
         title = kwargs.get('Title', '')
         self.setWindowTitle(title)
         self.resize(*size)
-        self.domains = kwargs.get('domains')
-        self.domain_layout = self.domainsUI()
+        self.domains = kwargs.get('domains', None)
+
+        self.init_settings_UI()
 
         self.turbosurface_layout = self.turbosurfaceUI()
         self.main_layout = QGridLayout()
@@ -213,36 +280,31 @@ class MainWindow(QMainWindow):
         self.res_file_directory = None
 
         tabs = {
-            'Settings': self.domain_layout,
+            'Settings': self.domain_UI_grid_layout,
             'Turbo Surfaces': self.turbosurface_layout,
             'Planes': QWidget(),
             'Images': QWidget(),
             'Report': QWidget(),
             'Presentation': QWidget()
         }
-        self.tab_widget = TabWidget(tabs=tabs)
 
+        self.tab_widget = TabWidget(tabs=tabs)
         self.main_layout.addWidget(self.tab_widget, 0, 0)
         self.main_layout.addLayout(self.buttons_layout, 0, 1)
         self.main_widget = QWidget()
         self.main_widget.setLayout(self.main_layout)
         self.setCentralWidget(self.main_widget)
 
-
-    def domainsUI(self):
-
-        cmbbox = ComboBox(items=self.domains.keys(), geometry=[128, 32], alignment=Qt.AlignLeft)
-        idx = cmbbox.currentIndex()
-        current_domain = list(self.domains.keys())[idx]
-        self.interfaces_list = ListWidget(items=self.domains[current_domain], geometry=[230, 400])
-        cmbbox.currentIndexChanged.connect(self.domain_activated)
-        cmbbox.activated.connect(self.domain_activated)
+    def init_settings_UI(self):
+        self.dmn_cmbbox = ComboBox(items=None, geometry=[128, 32], alingment=Qt.AlignLeft)
+        self.dmn_cmbbox.setEnabled(False)
+        self.interfaces_list = ListWidget(items=None, geometry=[300, 400])
+        self.interfaces_list.setEnabled(False)
         label = Label(text='Domains:', geometry=[2, 2, 24, 12], alignment=[Qt.AlignLeft, Qt.AlignVCenter])
-        self.interfaces_list.itemDoubleClicked.connect(self.interface_activate)
 
         widgets = [
             ['widget', label, [0, 0]],
-            ['widget', cmbbox, [0, 1]],
+            ['widget', self.dmn_cmbbox, [0, 1]],
             ['widget', self.interfaces_list, [2, 0, 1, 2]],
             ['widget', QWidget(), [0, 3]],
             ['widget', QWidget(), [3, 0, 1, 2]]
@@ -251,9 +313,17 @@ class MainWindow(QMainWindow):
             'hspace': 30, 'vspace':10, 'rect': [2, 2, 200, 200],
             'col_stretch': [[3, 1]], 'row_stretch': [[3, 1]]
         }
-        domainUIGridLayout = GridLayout(widgets=widgets, **settings)
+        self.domain_UI_grid_layout = GridLayout(widgets=widgets, **settings)
 
-        return domainUIGridLayout
+    def domains_UI(self):
+
+        self.dmn_cmbbox.set_items(items=self.domains.keys())
+        self.dmn_cmbbox.currentIndexChanged.connect(self.domain_activated)
+        self.dmn_cmbbox.activated.connect(self.domain_activated)
+        self.interfaces_list.clear()
+        idx = self.dmn_cmbbox.currentIndex()
+        current_domain = list(self.domains.keys())[idx]
+        self.interfaces_list.set_items(items=self.domains[current_domain])
 
     def turbosurfaceUI(self):
         widget = QWidget()
@@ -264,7 +334,8 @@ class MainWindow(QMainWindow):
         btn_settings = [
             {'text': 'Open Directory', 'signals': [['clicked', self.open_directory]]},
             {'text': 'Save to ...', 'signals': [['clicked', self.save_as]]},
-            {'text': 'Save template', 'signals': [['clicked', self.save_template]]}
+            {'text': 'Save template', 'signals': [['clicked', self.save_template]]},
+            {'text': 'Load template', 'signals': [['clicked', self.load_template]]}
         ]
         buttons = []
         for btn in btn_settings:
@@ -287,9 +358,31 @@ class MainWindow(QMainWindow):
     def open_directory(self):
         open_dir = FileDialog()
         self.res_file_directory = open_dir.open_directory()
+        
+        try:
+            outfiles = get_files(ext='out', directory=self.res_file_directory)
+            if outfiles:
+                self.interfaces_list.clear()
+                self.dmn_cmbbox.clear()
+                self.dmn_cmbbox.setEnabled(True)
+                self.interfaces_list.setEnabled(True)
+                self.domains = get_domains(outfile=outfiles[0])
+                self.domains_UI()
+            else:
+                msg = 'Out files have not been found.'
+                ex = 'Files Not Found'
+                diag = MessageBox(title=ex, information=msg)
+                diag.show()
+                diag.exec()
+        except FileNotFoundError as ex:
+            pass
+
 
     def save_as(self):
         pass
 
     def save_template(self):
+        pass
+
+    def load_template(self):
         pass
