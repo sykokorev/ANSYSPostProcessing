@@ -1,24 +1,60 @@
 import os
 import ctypes
+import sys
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 
 from utils.parse_out import *
-from gui.gui import MainWindow
+from utils.generate_cse import Table
+# from gui.gui import MainWindow, MessageBox
+from gui.mainwindow import MainWindow
+from gui.tabs import InitTab
 
-DIRECROTY = r"E:\Kokorev\temp\post_processing_res"
-OUTFILE = r"BL7_Hub_Tipcl_GV1_GV2_v1_80prct_ps1_Steady_with_Cav_Yes_Open2_ps1_004.out"
-FILE = os.path.join(DIRECROTY, OUTFILE)
 
 if __name__ == "__main__":
 
-    domains = get_domains(outfile=FILE)
     user32 = ctypes.windll.user32
     screensize = user32.GetSystemMetrics(0)/2, user32.GetSystemMetrics(1)/2
 
     app = QApplication()
-    window = MainWindow(title='ANSYS Post Processing', size=screensize)
+    btns = [
+        {'text': 'Open out file'},
+        {'text': 'Open res files direcotry'},
+        {'text': 'Save...'},
+        {'text': 'Save template'},
+        {'text': 'Load template'}
+    ]
+
+    init_tab = InitTab()
+    tabs = [init_tab]
+
+    window = MainWindow(
+        title='ANSYS Post Processing', size=screensize,
+        tabs=tabs, buttons=btns
+    )
 
     window.show()
     app.exec()
+
+    # output_directory = window.file_save_directory
+    # try:
+    #     cst_file = os.path.join(output_directory, 'out.cst')
+    # except TypeError:
+    #     msgbox = MessageBox(information='Output directory has noe been choisen', title='Error Message')
+    #     msgbox.show()
+    #     msgbox.exec()
+    #     sys.exit(-1)
+
+    # expressions = [(exp.split(sep='=')[0].strip(), exp.split(sep='=')[1].strip()) for exp in window.get_expressions()]
+    # expressions = dict(expressions)
+    # table_cst = Table(list(expressions.values()), table_name='ACC')
+
+    # table_cst.gen_expression()
+    # code_cst = table_cst.gen_cse_code()
+
+    # with open(cst_file, 'w') as cse:
+    #     for case in window.res_files:
+    #         cse.write(f'>load filename={case}, force_reload=true\n>update\n')
+    #         cse.write(code_cst)
+        

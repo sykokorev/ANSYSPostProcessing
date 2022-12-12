@@ -1,20 +1,24 @@
 from PySide6.QtWidgets import (
     QMainWindow, QGridLayout,
     QWidget, QTabWidget, QLabel,
-    QLineEdit, QComboBox, QListWidget,
+    QComboBox, QListWidget,
     QListWidgetItem, QTabWidget,
     QLayout, QVBoxLayout, QHBoxLayout,
     QButtonGroup, QPushButton, QFileDialog,
-    QDialog, QMessageBox, QMenu
+    QDialog, QMessageBox, QMenu, QListView, 
+    QTextEdit, QToolBar, QAbstractItemView
 )
 from PySide6.QtCore import (
-    Qt, QRect, QSize, QEvent, QObject
+    Qt, QRect, QSize, QMimeData
 )
-from PySide6.QtGui import QFont, QMouseEvent, QContextMenuEvent, QAction
+from PySide6.QtGui import (
+    QFont, QAction, QCloseEvent, QMouseEvent, QDrag,
+    QDragEnterEvent, QDropEvent, QContextMenuEvent
+)
 
-from utils.consts import FONT, MSG_FONT
+from utils.consts import *
 from utils.parse_out import *
-
+from utils.template_keys import *
 
 
 def clicked(btn, func):
@@ -33,37 +37,150 @@ def toggled(btn, func):
     btn.toggled.connect(func)
 
 
+class Menu(QMenu):
+    def __init__(self, parent: QWidget=None, **kwargs):
+        super(Menu, self).__init__(parent)
+
+        actions = kwargs.get('actions', dict())
+        self.setFont(QFont(*MENU_FONT))
+        
+        for text, func in actions.items():
+            action = QAction(text)
+            action.triggered.connect(func)
+            self.addAction(action)            
+
+
+class ToolBar(QToolBar):
+    def __init__(self, parent: QWidget=None, **kwargs):
+        super(ToolBar, self).__init__(parent)
+        
+        actions = kwargs.get('actions', dict())
+        icon_size = kwargs.get('icon_size', (32, 32))
+        self.setIconSize(QSize(*icon_size))
+        self.setFont(QFont(*TOOLBAR_FONT))
+        self.setMovable(False)
+        self.setFloatable(False)
+
+        for btn_text, func in actions.items():
+            btn = QAction(btn_text, parent)
+            btn.triggered.connect(func)
+            self.addAction(btn)
+
+
+class ExpressionCalc(QMainWindow):
+    def __init__(self, parent: QWidget=None, **kwargs):
+        super(ExpressionCalc, self).__init__(parent)
+
+        self.resize(600, 300)
+        self.setWindowTitle("Expression Editor")
+        domains = kwargs.get('domains', dict())
+        self.expression = kwargs.get('expression')
+        self.user_vars = kwargs.get('user_variables', None)
+
+        if not self.expression:
+            self.expression = QListWidgetItem()
+            self.expression.setText('')
+
+        solution_vars = SOLUTION_KEYS
+        turbo_vars = TURBO_KEYS
+        functions = FUNCTION_KEYS
+
+        self.editor = QTextEdit()
+        self.editor.setText(self.expression.text())
+        self.editor.setFont(QFont(*MSG_FONT))
+        self.ok_btn = PushButton(text='Ok', )
+        self.ok_btn.clicked.connect(self.close_editor)
+
+        layout = GridLayout(widgets=[
+            ['widget', self.editor, [0, 0]], ['widget', self.ok_btn, [1, 0]]
+        ])
+
+        central_widget = QWidget()
+        central_widget.setLayout(layout)
+        self.setCentralWidget(central_widget)
+        self.menu = self.menuBar()
+        self.variables_menu = self.menu.addMenu("&Variables")
+        self.locations_menu = self.menu.addMenu("&Locations")
+        self.functions_menu = self.menu.addMenu("&Functions")
+        if self.user_vars:
+            self.user_vars_menu = self.menu.addMenu('&User Variables')
+            self.user_vars_menu.triggered.connect(self.paste_vars)
+            for var in self.user_vars:
+                action = QAction(var, self)
+                action.setText(var)
+                self.user_vars_menu.addAction(action)
+
+        self.solution_submenu = self.variables_menu.addMenu("&Solution")
+        self.turbo_submenu = self.variables_menu.addMenu("&Turbo")
+
+        self.functions_menu.triggered.connect(self.paste_vars)
+        self.solution_submenu.triggered.connect(self.paste_func)
+        self.turbo_submenu.triggered.connect(self.paste_func)
+        
+        for function in functions:
+            action = QAction(function, self)
+            action.setText(function)
+            self.functions_menu.addAction(action)
+
+        for domain, interfaces in domains.items():
+            dmn_submenu = self.locations_menu.addMenu(domain)
+            dmn_submenu.triggered.connect(self.paste_func)
+            for interface in interfaces:
+                action = QAction(interface, self)
+                action.setText(interface)
+                dmn_submenu.addAction(action)
+
+        for var in solution_vars:
+            action = QAction(var, self)
+            action.setText(var)
+            self.solution_submenu.addAction(action)
+
+        for var in turbo_vars:
+            action = QAction(var, self)
+            action.setText(var)
+            self.turbo_submenu.addAction(action)
+
+    def close_editor(self):
+        if self.editor.toPlainText():
+            self.expression.setText(self.editor.toPlainText())
+        else:
+            self.expression = None
+        self.close()
+
+    def paste_vars(self, action):
+        text = action.text()
+        self.editor.insertPlainText(text)
+    
+    def paste_func(self, action):
+        text = f'"{action.text()}"'
+        self.editor.insertPlainText(text)
+    
+    def closeEvent(self, event: QCloseEvent) -> None:
+
+        if self.editor.toPlainText():
+            self.expression.setText(self.editor.toPlainText())
+        else:
+            self.expression = None
+        return super().closeEvent(event)
+        
+
 class Dialog(QDialog):
-    def __init__(self, actions: dict, parent=None):
-        super(Dialog, self).__init__()
-        self.actions_ = None
-
-    def eventFilter(self, source: QObject, event: QEvent) -> bool:
-        if event == QEvent.ContextMenu and source in (QListWidget):
-            menu = QMenu()
-            for text, action in self.actions_.items():
-                menu.addAction(text)
-                if menu.exec(event.globalPos()):
-                    item = source.itemAt(event.pos())
-                    print(item.text)
-            return True
-
-        return super().eventFilter(source, event)
-
-    def set_action(self, actions):
-        self.action = actions
+    def __init__(self, name, parent=None):
+        super(Dialog, self).__init__(parent)
+        self.resize(600, 300)
+        self.label = QLabel(name, self)
 
 
 class Menu(QMenu):
-    def __init__(self, actions):
+    def __init__(self, actions: dict):
         super(Menu, self).__init__()
-        for action in actions:
-            self.addAction(action)
-
+        for text, action in actions.items():
+            self.addAction(text, action)
+            
 
 class Label(QLabel):
-    def __init__(self, text: str, geometry: list, alignment: 
-                        Qt.AlignmentFlag=[Qt.AlignHCenter, Qt.AlignVCenter], **kwargs):
+    def __init__(self, text: str, geometry: list, 
+                alignment: Qt.AlignmentFlag=[Qt.AlignHCenter, Qt.AlignVCenter], **kwargs):
         super(Label, self).__init__()
 
         font = kwargs.get('font', FONT)
@@ -75,48 +192,125 @@ class Label(QLabel):
         self.setAlignment(alignment[0])
         self.setAlignment(alignment[1])
         self.setFont(qfont)
+        self.setWordWrap(True)
 
 
 class ComboBox(QComboBox):
-    def __init__(self, geometry: list, **kwargs):
+    def __init__(self, geometry: list=[], **kwargs):
         super(ComboBox, self).__init__()
 
         font = kwargs.get('font', FONT)
         qfont = QFont(*font)
         size = QSize(*geometry)
+        min_width = kwargs.get('min_width', 128)
+        min_height = kwargs.get('min_width', 32)
         self.setFixedSize(size)
         self.setFont(qfont)
+
+        if any([g for g in geometry]):
+            size = QSize(*geometry)
+            self.setFixedSize(size)
+        elif not geometry:
+            self.setResizeMode(QListView.Adjust)
+            self.setMinimumWidth(min_width)
+            self.setMinimumHeight(min_height)
 
     def set_items(self, items: list):
         if hasattr(items, '__iter__'):
             self.addItems(items)
+
+
+class DragItem(QListWidgetItem):
+    def __init__(self, parent=None):
+        super(DragItem, self).__init__()
+        self.parent = parent
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+
+        if event.buttons() == Qt.LeftButton:
+            drag = QDrag(self.parent)
+            mime = QMimeData()
+            drag.setMimeData(mime)
+            drag.exec(Qt.MoveAction)
+        return super().mousePressEvent(event)
 
 
 class ListWidget(QListWidget):
-    def __init__(self, geometry: list, **kwargs):
+    def __init__(self, geometry: list=[], **kwargs):
         super(ListWidget, self).__init__()
 
-        font = kwargs.get('font', FONT)
+        font = kwargs.get('font', LIST_FONT)
         qfont = QFont(*font)
         alignment = kwargs.get('alignment', Qt.AlignLeft)
+        min_width = kwargs.get('min_width', 128)
+        min_height = kwargs.get('min_width', 32)
+        drag_n_drop = kwargs.get('drag_n_drop', None)
+        self.cmenu_actions = kwargs.get('context_menu_actions', None)
 
         self.setItemAlignment(alignment)
-        size = QSize(*geometry)
-        self.setFixedSize(size)
+        self.setWordWrap(True)
+        self.setWrapping(True)
+        if not geometry:
+            self.setMinimumWidth(min_width)
+            self.setMinimumHeight(min_height)
+        else:
+            self.setGeometry(QRect(geometry))
         self.setFont(qfont)
-        self.context_menu = None
-        self.actions_ = kwargs.get('actions')
+        if drag_n_drop:
+            self.setAcceptDrops(True)
+            self.setDragDropMode(drag_n_drop)
 
-    def set_items(self, items: list):
+    def set_items(self, items: list, size_hint: list=[]):
         if hasattr(items, '__iter__'):
-            self.addItems(items)
+            for item in items:
+                wi = QListWidgetItem(self)
+                wi.setText(item)
+                wi.setSizeHint(QSize(*size_hint))
+                wi.setFlags(
+                    Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
+                )
+                self.addItem(wi)
 
-    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
-        if self.actions_:
-            print(self.actions_)
-            self.context_menu = Menu(actions=self.actions_)
-            
-        return super().contextMenuEvent(event)
+    def insert_item(self, item: QListWidgetItem, row: int, size_hint: list=[]):
+        if isinstance(item, QListWidgetItem):
+            item.setSizeHint(QSize(*size_hint))
+            item.setFlags(
+                Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
+            )
+            self.insertItem(row, item)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+
+        if event.buttons() == Qt.LeftButton:
+            drag = QDrag(self)
+            mime = QMimeData()
+            drag.setMimeData(mime)
+            drag.exec(Qt.MoveAction)
+
+        return super().mousePressEvent(event)
+
+    def contextMenuEvent(self, arg__1: QContextMenuEvent) -> None:
+
+        if self.cmenu_actions:
+            menu = Menu(actions=self.cmenu_actions)
+            menu.exec(self.mapToGlobal(arg__1.pos()))
+        return super().contextMenuEvent(arg__1)
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        event.accept()
+
+    def dragMoveEvent(self, event: QDragEnterEvent) -> None:
+        event.accept()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        pos = event.pos()
+        event.setDropAction(Qt.MoveAction)
+        current_row = self.currentRow()
+        current_item = self.item(current_row)
+        item = self.itemAt(pos.x(), pos.y())
+        row = self.row(item)
+        self.insertItem(row, current_item)
+        event.accept()
 
 
 class TabWidget(QTabWidget):
@@ -185,17 +379,9 @@ class PushButton(QPushButton):
     def __init__(self, **settings):
         super(PushButton, self).__init__()
 
-        signal_map = {
-            'clicked': clicked,
-            'pressed': pressed,
-            'released': released,
-            'toggled': toggled
-        }
-
         text = settings.get('text', 'Push Me!')
         checkable = settings.get('checkable', True)
         shortcut = settings.get('shortcut', None)
-        signals = settings.get('signals', None)
         font = settings.get('font', FONT)
 
         self.setText(text)
@@ -205,21 +391,27 @@ class PushButton(QPushButton):
         if shortcut:
             self.setShortcut(shortcut)
 
-        if signals:
-            for signal in signals:
-                signal_map[signal[0]].__call__(self, signal[1])
-
 
 class FileDialog(QFileDialog):
     def __init__(self, **settings):
         super(FileDialog, self).__init__()
+        self.title = settings.get('title', 'File Dialog')
+        self.filter_ = settings.get('filter', None)
+        self.dir = settings.get('directory', '')
+        self.setWindowTitle(self.title)
 
-        self.filters = settings.get('filter', None)
-
-    def open_directory(self):
+    def open_direcory(self):
         self.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
-        self.setOption(QFileDialog.Option.ShowDirsOnly)
-        return self.getExistingDirectory()
+        directory = self.getExistingDirectory(caption=self.title, dir=self.dir)
+        return directory
+
+    def open_file(self):
+        file = self.getOpenFileName(self, self.title, self.dir, self.filter_)
+        return file
+
+    def save_as(self):
+        self.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+        return self.getSaveFileName(caption=self.title, filter=self.filter_, dir=self.dir)
 
 
 class MessageBox(QMessageBox):
@@ -249,140 +441,3 @@ class MessageBox(QMessageBox):
             for text, btn in buttons.items():
                 self.addButton(btn)
                 btn.setText(text)
-
-
-class MainWindow(QMainWindow):
-
-    def __init__(self, **kwargs):
-        
-        super().__init__()
-
-        empty = QWidget()
-
-        size = kwargs.get('size', [1280, 720])
-        title = kwargs.get('Title', '')
-        self.setWindowTitle(title)
-        self.resize(*size)
-        self.domains = kwargs.get('domains', None)
-
-        self.init_settings_UI()
-
-        self.turbosurface_layout = self.turbosurfaceUI()
-        self.main_layout = QGridLayout()
-
-        self.buttons = self.controlButtonUI()
-        self.buttons_layout = GridLayout(
-            widgets=[
-                *[['widget', btn, [row, 0]] for row, btn in enumerate(self.buttons.buttons())],
-                ['widget', empty, [len(self.buttons.buttons()), 0]]
-            ]
-        )
-        self.res_file_directory = None
-
-        tabs = {
-            'Settings': self.domain_UI_grid_layout,
-            'Turbo Surfaces': self.turbosurface_layout,
-            'Planes': QWidget(),
-            'Images': QWidget(),
-            'Report': QWidget(),
-            'Presentation': QWidget()
-        }
-
-        self.tab_widget = TabWidget(tabs=tabs)
-        self.main_layout.addWidget(self.tab_widget, 0, 0)
-        self.main_layout.addLayout(self.buttons_layout, 0, 1)
-        self.main_widget = QWidget()
-        self.main_widget.setLayout(self.main_layout)
-        self.setCentralWidget(self.main_widget)
-
-    def init_settings_UI(self):
-        self.dmn_cmbbox = ComboBox(items=None, geometry=[128, 32], alingment=Qt.AlignLeft)
-        self.dmn_cmbbox.setEnabled(False)
-        self.interfaces_list = ListWidget(items=None, geometry=[300, 400])
-        self.interfaces_list.setEnabled(False)
-        label = Label(text='Domains:', geometry=[2, 2, 24, 12], alignment=[Qt.AlignLeft, Qt.AlignVCenter])
-
-        widgets = [
-            ['widget', label, [0, 0]],
-            ['widget', self.dmn_cmbbox, [0, 1]],
-            ['widget', self.interfaces_list, [2, 0, 1, 2]],
-            ['widget', QWidget(), [0, 3]],
-            ['widget', QWidget(), [3, 0, 1, 2]]
-        ]
-        settings = {
-            'hspace': 30, 'vspace':10, 'rect': [2, 2, 200, 200],
-            'col_stretch': [[3, 1]], 'row_stretch': [[3, 1]]
-        }
-        self.domain_UI_grid_layout = GridLayout(widgets=widgets, **settings)
-
-    def domains_UI(self):
-
-        self.dmn_cmbbox.set_items(items=self.domains.keys())
-        self.dmn_cmbbox.currentIndexChanged.connect(self.domain_activated)
-        self.dmn_cmbbox.activated.connect(self.domain_activated)
-        self.interfaces_list.clear()
-        idx = self.dmn_cmbbox.currentIndex()
-        current_domain = list(self.domains.keys())[idx]
-        self.interfaces_list.set_items(items=self.domains[current_domain])
-
-    def turbosurfaceUI(self):
-        widget = QWidget()
-        ts_layout = GridLayout(widgets=[['widget', widget, [0, 0]]])
-        return ts_layout
-
-    def controlButtonUI(self):
-        btn_settings = [
-            {'text': 'Open Directory', 'signals': [['clicked', self.open_directory]]},
-            {'text': 'Save to ...', 'signals': [['clicked', self.save_as]]},
-            {'text': 'Save template', 'signals': [['clicked', self.save_template]]},
-            {'text': 'Load template', 'signals': [['clicked', self.load_template]]}
-        ]
-        buttons = []
-        for btn in btn_settings:
-            buttons.append(PushButton(**btn))
-
-        qbtns = ButtonGroup(buttons=buttons)
-
-        return qbtns
-
-    def domain_activated(self, idx):
-        current_domain = list(self.domains.keys())[idx]
-        self.interfaces_list.clear()
-        for i, item in enumerate(self.domains[current_domain]):
-            qitem = QListWidgetItem(item)
-            self.interfaces_list.insertItem(i, qitem)
-
-    def interface_activate(self, item):
-        return item.text()
-
-    def open_directory(self):
-        open_dir = FileDialog()
-        self.res_file_directory = open_dir.open_directory()
-        
-        try:
-            outfiles = get_files(ext='out', directory=self.res_file_directory)
-            if outfiles:
-                self.interfaces_list.clear()
-                self.dmn_cmbbox.clear()
-                self.dmn_cmbbox.setEnabled(True)
-                self.interfaces_list.setEnabled(True)
-                self.domains = get_domains(outfile=outfiles[0])
-                self.domains_UI()
-            else:
-                msg = 'Out files have not been found.'
-                ex = 'Files Not Found'
-                diag = MessageBox(title=ex, information=msg)
-                diag.show()
-                diag.exec()
-        except FileNotFoundError as ex:
-            pass
-
-
-    def save_as(self):
-        pass
-
-    def save_template(self):
-        pass
-
-    def load_template(self):
-        pass
