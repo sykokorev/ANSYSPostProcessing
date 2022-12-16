@@ -9,7 +9,7 @@ FUNCTION_KEYS = [
     'massFlowAveAbs', 'maxVal', 'minVal', 'sum', 'volume', 'volumeAve', 'volumeInt'
 ]
 SOLUTION_KEYS = [
-    'Absolute Pressure', 'Density', 'Dynamic Viscosity', 'Eddy Viscosity',
+    'Radius', 'Absolute Pressure', 'Density', 'Dynamic Viscosity', 'Eddy Viscosity',
     'Isoentropic Compression Efficiency', 'Mach Number', 'Mach Number in Stn Frame',
     'Mass Flow', 'Polytropic Compression Efficiency', 'Pressure', 'Static Enthalpy',
     'Static Entropy', 'Temperature', 'Total Density', 'Total Density in Rel Frame',

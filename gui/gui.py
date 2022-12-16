@@ -1,24 +1,23 @@
 from PySide6.QtWidgets import (
-    QMainWindow, QGridLayout,
-    QWidget, QTabWidget, QLabel,
+    QGridLayout, QWidget, QTabWidget, QLabel,
     QComboBox, QListWidget,
     QListWidgetItem, QTabWidget,
     QLayout, QVBoxLayout, QHBoxLayout,
     QButtonGroup, QPushButton, QFileDialog,
-    QDialog, QMessageBox, QMenu, QListView, 
-    QTextEdit, QToolBar, QAbstractItemView
+    QDialog, QMessageBox, QMenu, QToolBar,
+    QLineEdit, QCheckBox, QScrollBar, 
 )
 from PySide6.QtCore import (
-    Qt, QRect, QSize, QMimeData
+    Qt, QRect, QSize, QMimeData, QEvent, Slot
 )
 from PySide6.QtGui import (
-    QFont, QAction, QCloseEvent, QMouseEvent, QDrag,
-    QDragEnterEvent, QDropEvent, QContextMenuEvent
+    QFont, QAction, QMouseEvent, QDrag,
+    QDragEnterEvent, QDropEvent, QContextMenuEvent,
+    QCloseEvent, Qt
 )
 
 from utils.consts import *
 from utils.parse_out import *
-from utils.template_keys import *
 
 
 def clicked(btn, func):
@@ -37,17 +36,28 @@ def toggled(btn, func):
     btn.toggled.connect(func)
 
 
+class Action(QAction):
+    def __init__(self, parent: QWidget=None, **kwargs):
+        super(Action, self).__init__(parent)
+
+        self.setParent(parent)
+        actions = kwargs.get('actions', dict())
+        for text, func in actions.items():
+            self.setText(text)
+            self.triggered.connect(func)
+
+
 class Menu(QMenu):
     def __init__(self, parent: QWidget=None, **kwargs):
         super(Menu, self).__init__(parent)
 
+        self.setParent(parent)
         actions = kwargs.get('actions', dict())
-        self.setFont(QFont(*MENU_FONT))
-        
+
         for text, func in actions.items():
-            action = QAction(text)
+            action = QAction(text, self.parent())
             action.triggered.connect(func)
-            self.addAction(action)            
+            self.addAction(action)
 
 
 class ToolBar(QToolBar):
@@ -67,103 +77,6 @@ class ToolBar(QToolBar):
             self.addAction(btn)
 
 
-class ExpressionCalc(QMainWindow):
-    def __init__(self, parent: QWidget=None, **kwargs):
-        super(ExpressionCalc, self).__init__(parent)
-
-        self.resize(600, 300)
-        self.setWindowTitle("Expression Editor")
-        domains = kwargs.get('domains', dict())
-        self.expression = kwargs.get('expression')
-        self.user_vars = kwargs.get('user_variables', None)
-
-        if not self.expression:
-            self.expression = QListWidgetItem()
-            self.expression.setText('')
-
-        solution_vars = SOLUTION_KEYS
-        turbo_vars = TURBO_KEYS
-        functions = FUNCTION_KEYS
-
-        self.editor = QTextEdit()
-        self.editor.setText(self.expression.text())
-        self.editor.setFont(QFont(*MSG_FONT))
-        self.ok_btn = PushButton(text='Ok', )
-        self.ok_btn.clicked.connect(self.close_editor)
-
-        layout = GridLayout(widgets=[
-            ['widget', self.editor, [0, 0]], ['widget', self.ok_btn, [1, 0]]
-        ])
-
-        central_widget = QWidget()
-        central_widget.setLayout(layout)
-        self.setCentralWidget(central_widget)
-        self.menu = self.menuBar()
-        self.variables_menu = self.menu.addMenu("&Variables")
-        self.locations_menu = self.menu.addMenu("&Locations")
-        self.functions_menu = self.menu.addMenu("&Functions")
-        if self.user_vars:
-            self.user_vars_menu = self.menu.addMenu('&User Variables')
-            self.user_vars_menu.triggered.connect(self.paste_vars)
-            for var in self.user_vars:
-                action = QAction(var, self)
-                action.setText(var)
-                self.user_vars_menu.addAction(action)
-
-        self.solution_submenu = self.variables_menu.addMenu("&Solution")
-        self.turbo_submenu = self.variables_menu.addMenu("&Turbo")
-
-        self.functions_menu.triggered.connect(self.paste_vars)
-        self.solution_submenu.triggered.connect(self.paste_func)
-        self.turbo_submenu.triggered.connect(self.paste_func)
-        
-        for function in functions:
-            action = QAction(function, self)
-            action.setText(function)
-            self.functions_menu.addAction(action)
-
-        for domain, interfaces in domains.items():
-            dmn_submenu = self.locations_menu.addMenu(domain)
-            dmn_submenu.triggered.connect(self.paste_func)
-            for interface in interfaces:
-                action = QAction(interface, self)
-                action.setText(interface)
-                dmn_submenu.addAction(action)
-
-        for var in solution_vars:
-            action = QAction(var, self)
-            action.setText(var)
-            self.solution_submenu.addAction(action)
-
-        for var in turbo_vars:
-            action = QAction(var, self)
-            action.setText(var)
-            self.turbo_submenu.addAction(action)
-
-    def close_editor(self):
-        if self.editor.toPlainText():
-            self.expression.setText(self.editor.toPlainText())
-        else:
-            self.expression = None
-        self.close()
-
-    def paste_vars(self, action):
-        text = action.text()
-        self.editor.insertPlainText(text)
-    
-    def paste_func(self, action):
-        text = f'"{action.text()}"'
-        self.editor.insertPlainText(text)
-    
-    def closeEvent(self, event: QCloseEvent) -> None:
-
-        if self.editor.toPlainText():
-            self.expression.setText(self.editor.toPlainText())
-        else:
-            self.expression = None
-        return super().closeEvent(event)
-        
-
 class Dialog(QDialog):
     def __init__(self, name, parent=None):
         super(Dialog, self).__init__(parent)
@@ -171,24 +84,22 @@ class Dialog(QDialog):
         self.label = QLabel(name, self)
 
 
-class Menu(QMenu):
-    def __init__(self, actions: dict):
-        super(Menu, self).__init__()
-        for text, action in actions.items():
-            self.addAction(text, action)
-            
-
 class Label(QLabel):
-    def __init__(self, text: str, geometry: list, 
+    def __init__(self, text: str, geometry: list=None, 
                 alignment: Qt.AlignmentFlag=[Qt.AlignHCenter, Qt.AlignVCenter], **kwargs):
         super(Label, self).__init__()
 
         font = kwargs.get('font', FONT)
         qfont = QFont(*font)
+        size = kwargs.get('size')
 
         self.setText(text)
-        rect = QRect(*geometry)
-        self.setGeometry(rect)
+        if geometry:
+            rect = QRect(*geometry)
+            self.setGeometry(rect)
+        
+        if size:
+            self.resize(QSize(*size))
         self.setAlignment(alignment[0])
         self.setAlignment(alignment[1])
         self.setFont(qfont)
@@ -196,28 +107,35 @@ class Label(QLabel):
 
 
 class ComboBox(QComboBox):
-    def __init__(self, geometry: list=[], **kwargs):
-        super(ComboBox, self).__init__()
+    def __init__(self, parent: QWidget=None, size: list=[], **kwargs):
+        super(ComboBox, self).__init__(parent, **kwargs)
 
         font = kwargs.get('font', FONT)
-        qfont = QFont(*font)
-        size = QSize(*geometry)
         min_width = kwargs.get('min_width', 128)
         min_height = kwargs.get('min_width', 32)
-        self.setFixedSize(size)
-        self.setFont(qfont)
 
-        if any([g for g in geometry]):
-            size = QSize(*geometry)
+        self.setFont(QFont(*font))
+
+        if size:
+            size = QSize(*size)
             self.setFixedSize(size)
-        elif not geometry:
-            self.setResizeMode(QListView.Adjust)
+        elif not size:
             self.setMinimumWidth(min_width)
             self.setMinimumHeight(min_height)
 
     def set_items(self, items: list):
-        if hasattr(items, '__iter__'):
+        if isinstance(items, list):
             self.addItems(items)
+        if isinstance(items, dict):
+            for row, (key, val) in enumerate(items.items()):
+                self.addItem(key)
+                self.setItemData(row, key, Qt.AccessibleDescriptionRole)
+                for v in val:
+                    self.addItem(f'\t{v}')
+    
+    def update_cmbb(self, item: str):
+        self.addItem(item)
+        self.setCurrentIndex(self.count()-1)
 
 
 class DragItem(QListWidgetItem):
@@ -245,11 +163,20 @@ class ListWidget(QListWidget):
         min_width = kwargs.get('min_width', 128)
         min_height = kwargs.get('min_width', 32)
         drag_n_drop = kwargs.get('drag_n_drop', None)
-        self.cmenu_actions = kwargs.get('context_menu_actions', None)
+        self.__context_menu = kwargs.get('context_menu', None)
+        size = kwargs.get('size')
+        scrollbar = kwargs.get('scrollbar', False)
 
         self.setItemAlignment(alignment)
         self.setWordWrap(True)
-        self.setWrapping(True)
+
+        if scrollbar:
+            scrollbar = QScrollBar(self)
+            self.addScrollBarWidget(scrollbar, Qt.AlignLeft)
+
+        if size:
+            self.resize(QSize(*size))
+
         if not geometry:
             self.setMinimumWidth(min_width)
             self.setMinimumHeight(min_height)
@@ -260,24 +187,75 @@ class ListWidget(QListWidget):
             self.setAcceptDrops(True)
             self.setDragDropMode(drag_n_drop)
 
-    def set_items(self, items: list, size_hint: list=[]):
+    @property
+    def context_menu(self):
+        return self.__context_menu
+
+    @property
+    def item_text(self, row: int):
+        if isinstance(row, int):
+            return self.item(row).text()
+        else:
+            return None
+
+    @property
+    def list_items(self):
+        return [self.item(row) for row in range(self.count())]
+
+    @context_menu.setter
+    def context_menu(self, menu: Menu):
+        if isinstance(menu, Menu):
+            self.__context_menu = menu
+
+    def set_items(self, items: list, size_hint: list=None):
         if hasattr(items, '__iter__'):
             for item in items:
                 wi = QListWidgetItem(self)
-                wi.setText(item)
-                wi.setSizeHint(QSize(*size_hint))
+                wi.setText(item[0])
+                if size_hint:
+                    wi.setSizeHint(QSize(*size_hint))
                 wi.setFlags(
                     Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
                 )
+                if item[1]:
+                    wi.setToolTip(item[1])
                 self.addItem(wi)
+            col_size = self.sizeHintForColumn(0)
+            for row in range(self.count()):
+                if self.width() > col_size:
+                    self.item(row).setSizeHint(QSize(self.width(), self.sizeHintForRow(0)))
 
-    def insert_item(self, item: QListWidgetItem, row: int, size_hint: list=[]):
+    def add_item(self, item: list, size_hint: list=None):
+        wi = QListWidgetItem(self)
+        wi.setText(item[0])
+        if item[1]:
+            wi.setToolTip(item[1])
+        if size_hint:
+            wi.setSizeHint(QSize(*size_hint))
+        wi.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+        col_size = self.sizeHintForColumn(0)
+        if self.width() > col_size:
+            wi.setSizeHint(QSize(self.width(), self.sizeHintForRow(0)))
+
+    def set_item(self, item: tuple):
+        row = self.currentRow()
+        self.takeItem(row)
+        wi = QListWidgetItem()
+        wi.setText(item[0])
+        if item[1]:
+            wi.setToolTip(item[1])
+        self.insertItem(row, wi)
+
+    def insert_item(self, item: QListWidgetItem, row: int, size_hint: list=[]) -> QListWidgetItem:
         if isinstance(item, QListWidgetItem):
             item.setSizeHint(QSize(*size_hint))
             item.setFlags(
                 Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
             )
             self.insertItem(row, item)
+            return self.item(row)
+
+        return None
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
 
@@ -290,10 +268,8 @@ class ListWidget(QListWidget):
         return super().mousePressEvent(event)
 
     def contextMenuEvent(self, arg__1: QContextMenuEvent) -> None:
-
-        if self.cmenu_actions:
-            menu = Menu(actions=self.cmenu_actions)
-            menu.exec(self.mapToGlobal(arg__1.pos()))
+        if self.__context_menu:
+            self.__context_menu.exec(self.mapToGlobal(arg__1.pos()))
         return super().contextMenuEvent(arg__1)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
@@ -312,6 +288,22 @@ class ListWidget(QListWidget):
         self.insertItem(row, current_item)
         event.accept()
 
+    @Slot()
+    def item_up(self) -> None:
+        row = self.currentRow()
+        item = self.takeItem(row)
+        self.insertItem(row-1, item)
+
+    @Slot()
+    def item_down(self) -> None:
+        row = self.currentRow()
+        item = self.takeItem(row)
+        self.insertItem(row+1, item)
+
+    @Slot()
+    def delete_item(self) -> None:
+        self.takeItem(self.currentRow())
+    
 
 class TabWidget(QTabWidget):
     def __init__(self, tabs: dict, **kwargs):
@@ -383,13 +375,18 @@ class PushButton(QPushButton):
         checkable = settings.get('checkable', True)
         shortcut = settings.get('shortcut', None)
         font = settings.get('font', FONT)
+        size = settings.get('size', None)
+        enable = settings.get('enable', True)
 
         self.setText(text)
         self.setCheckable(checkable)
         self.setFont(QFont(*font))
+        self.setEnabled(enable)
         
         if shortcut:
             self.setShortcut(shortcut)
+        if size:
+            self.setFixedSize(QSize(*size))
 
 
 class FileDialog(QFileDialog):
@@ -398,6 +395,7 @@ class FileDialog(QFileDialog):
         self.title = settings.get('title', 'File Dialog')
         self.filter_ = settings.get('filter', None)
         self.dir = settings.get('directory', '')
+        self.buttons = settings.get('buttons')
         self.setWindowTitle(self.title)
 
     def open_direcory(self):
@@ -412,6 +410,10 @@ class FileDialog(QFileDialog):
     def save_as(self):
         self.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
         return self.getSaveFileName(caption=self.title, filter=self.filter_, dir=self.dir)
+    
+    def open_files(self):
+        files = self.getOpenFileNames(self, self.title, self.dir, self.filter_)
+        return files
 
 
 class MessageBox(QMessageBox):
@@ -441,3 +443,83 @@ class MessageBox(QMessageBox):
             for text, btn in buttons.items():
                 self.addButton(btn)
                 btn.setText(text)
+
+class PopUpLineEdit(QDialog):
+    def __init__(self, parent: QWidget=None, **kwargs):
+        super(PopUpLineEdit, self).__init__(parent)
+
+        title = kwargs.get('title', 'Enter...')
+        size = kwargs.get('size', [312, 64])
+        editor_size = kwargs.get('editor_size', [306, 60])
+
+        self.setFixedSize(*size)
+        self.setWindowTitle(title)
+
+        self.editor = QLineEdit()
+        self.editor.resize(QSize(*editor_size))
+        self.text = None
+        self.ok_btn = PushButton(text='Ok', size=[96, 24])
+        self.cancel_btn = PushButton(text='Cancel', size=[96, 24])
+        self.cancel_btn.clicked.connect(self.unsave)
+        self.ok_btn.clicked.connect(self.save_and_close)
+
+        layout = GridLayout(widgets=[
+            ['widget', self.editor, [0, 0, 1, 2]], 
+            ['widget', self.ok_btn, [1, 0]], 
+            ['widget', self.cancel_btn, [1, 1]]
+        ], hspace=2, vspace=2, rect=[0, 0, 312, 64])
+        widget = QWidget()
+        widget.setLayout(layout)
+        self.setLayout(layout)
+
+    def save_and_close(self, event: QEvent):
+        self.text = self.editor.text()
+        self.close()
+        return event
+
+    def changeEvent(self, event: QEvent) -> None:
+        return super().changeEvent(event)
+
+    def unsave(self):
+        self.close()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        return super().closeEvent(event)
+
+
+class CheckBox(QCheckBox):
+    def __init__(self, parent: QWidget=None, **kwargs):
+        super(CheckBox, self).__init__(parent)
+
+        label = kwargs.get('label', '')
+        check_state = kwargs.get('check_state', Qt.CheckState.Unchecked)
+
+        self.setCheckable(True)
+        self.setCheckState(check_state)
+        self.setText(label)
+
+class LineEdit(QLineEdit):
+    def __init__(self, parent: QWidget=None, **kwargs):
+        super(LineEdit, self).__init__(parent)
+
+        text = kwargs.get('text')
+        mask = kwargs.get('mask')
+        size = kwargs.get('size')
+        placeholder = kwargs.get('placeholder', '')
+        font = kwargs.get('font', FONT)
+        self.cmenu_actions = kwargs.get('context_menu')
+
+        if size:
+            self.resize(QSize(*size))
+        self.setPlaceholderText(placeholder)
+        self.setText(text)
+        self.setFont(QFont(*font))
+        if mask:
+            self.setMask(mask)
+        
+    def contextMenuEvent(self, arg__1: QContextMenuEvent) -> None:
+
+        if self.cmenu_actions:
+            menu = Menu(actions=self.cmenu_actions)
+            menu.exec(self.mapToGlobal(arg__1.pos()))
+        return super().contextMenuEvent(arg__1)

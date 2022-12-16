@@ -9,7 +9,7 @@ from utils.parse_out import *
 from utils.generate_cse import Table
 # from gui.gui import MainWindow, MessageBox
 from gui.mainwindow import MainWindow
-from gui.tabs import InitTab
+from gui.tabs.tabs import InitTab
 
 
 if __name__ == "__main__":
@@ -26,7 +26,7 @@ if __name__ == "__main__":
         {'text': 'Load template'}
     ]
 
-    init_tab = InitTab()
+    init_tab = InitTab(title='Expressions')
     tabs = [init_tab]
 
     window = MainWindow(

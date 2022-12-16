@@ -1,3 +1,5 @@
+import json
+
 from PySide6.QtWidgets import (
     QMainWindow, QGridLayout, QWidget
 )
@@ -6,7 +8,6 @@ from PySide6.QtCore import Slot
 
 from utils.consts import *
 from utils.parse_out import *
-from utils.template_keys import *
 from gui.gui import *
 
 
@@ -27,6 +28,8 @@ class MainWindow(QMainWindow):
         self.domains = None
         self.out_file = None
         self.user_vars = None
+        self.template_file = None
+        self.perfomance_map = {}
 
         size = kwargs.get('size', [1280, 720])
         title = kwargs.get('Title', '')
@@ -60,24 +63,29 @@ class MainWindow(QMainWindow):
 
     def controlButtonUI(self):
         btn_settings = [
-            {'text': 'Open out file'},
-            {'text': 'Open res files direcotry'},
-            {'text': 'Save...'},
-            {'text': 'Save template'},
-            {'text': 'Load template'}
+            {'text': 'Load out file'},
+            {'text': 'Load template'},
+            {'text': 'Load res files direcotry', 'enable': False},
+            {'text': 'Save...', 'enable': False},
+            {'text': 'Save template'}
         ]
         buttons = []
         for btn in btn_settings:
             buttons.append(PushButton(**btn))
 
         buttons[0].clicked.connect(
-            lambda: self.open_file(filter='Ansys out file (*.out)', instance=self.tabs[0])
+            lambda: self.open_file(filter='Ansys out file (*.out)')
         )
-        buttons[1].clicked.connect(lambda: self.open_files(ext='res', title='Open res file directory'))
-        buttons[2].clicked.connect(lambda: self.open_directory(title="Save to Directory", directory="\\"))
-        
+        buttons[0].clicked.connect(self.set_enabled)
+        buttons[1].clicked.connect(
+            lambda: self.load_template_file(title="Load template", directory="\\", filter="Template file (*.tmp)")
+        )
+        buttons[2].clicked.connect(lambda: self.open_files(ext='res', title='Open res file directory'))
+        buttons[3].clicked.connect(lambda: self.open_directory(title="Save to Directory", directory="\\"))
+        buttons[4].clicked.connect(
+            lambda: self.save_template_as(title="Save template as", directory="\\", filter="Template files (*.tmp)")
+        )
         qbtns = ButtonGroup(buttons=buttons)
-
         return qbtns
 
     def initialize(self, instance: object) -> None:
@@ -85,9 +93,8 @@ class MainWindow(QMainWindow):
 
     def get_domains(self):
         try:
-            if self.out_file:
+            if self.out_file[0]:
                 self.domains = get_domains(outfile=self.out_file[0])
-                self.tabs[0].domains = self.domains
             else:
                 msg = 'Out files have not been found.'
                 ex = 'Files Not Found'
@@ -96,6 +103,15 @@ class MainWindow(QMainWindow):
                 diag.exec()
         except FileNotFoundError as ex:
             pass
+
+    @Slot()
+    def set_enabled(self):
+        if self.out_file[0]:
+            for btn in self.buttons.buttons()[1:]:
+                btn.setEnabled(True)
+        else:
+            for btn in self.buttons.buttons()[1:]:
+                btn.setEnabled(False)
 
     @Slot()
     def open_directory(self, title: str="Open directory", directory: str="\\"):
@@ -118,25 +134,54 @@ class MainWindow(QMainWindow):
             pass
 
     @Slot()
-    def open_file(self, instance, filter: str='', title='Open file', directory: str='\\'):
+    def open_file(self, filter: str='', title='Open file', directory: str='\\'):
         open_file = FileDialog(filter=filter, title=title, directory=directory)
         self.out_file = open_file.open_file()
         if self.out_file[0]:
-            instance.setup()
             self.get_domains()
+            self.tabs[0].update_tab(domains=self.domains)
 
     @Slot()
-    def save_as(self, filter: str='', title: str='Save file as', directory='\\', ext: str=None):
-        save_as = FileDialog(filter=filter, title=title, directory=directory, ext=ext)
-        self.save_template_file = save_as.save_as()
+    def save_template_as(self, filter: str='', title: str='Save file as', directory='\\'):
+        save_as = FileDialog(filter=filter, title=title, directory=directory)
+        self.template_file = save_as.save_as()
 
-    def setup(self, instance: object) -> None:
+        if self.template_file[0]:
+            expressions = []
+            for row in range(self.tabs[0].expression_list.count()):
+                var, exp = (t.strip() for t in self.tabs[0].expression_list.item(row).text().split('='))
+                desc = self.tabs[0].expression_list.item(row).toolTip()
+                expressions.append({'Variable': var, 'Expression': exp, 'Description': desc})
+            with open(self.template_file[0], 'w') as tmp:
+                json_data = {'expressions': expressions}
+                json.dump(json_data, tmp)
+            self.tabs[0].update(templates=json_data)
+
+    @Slot()
+    def load_template_file(self, filter: str='', title: str='Load file', directory='\\'):
+
+        load_file = FileDialog(filter=filter, title=title, directory=directory)
+        self.template_file = load_file.open_file()
+        if self.template_file[0]:
+            with open(self.template_file[0], 'r') as tmp:
+                try:
+                    template = json.load(tmp)
+                    self.tabs[0].setup(templates=template)
+                except json.JSONDecodeError:
+                    msg = 'Invalid format of template file.'
+                    ex = 'Invalid format'
+                    diag = MessageBox(title=ex, information=msg)
+                    diag.show()
+                    diag.exec()
+        self.template_file = None
+
+    def load(self, instance: object):
         try:
-            if self.out_file:
-                instance.setup()
+            if self.template_file[0]:
+                instance.load()
             else:
-                msg = 'Out files have not been found.'
-                ex = 'Files Not Found'
+                msg = 'File has not been loaded.'
+                ex = 'Invalid file'
                 diag = MessageBox(title=ex, information=msg)
                 diag.show()
                 diag.exec()
