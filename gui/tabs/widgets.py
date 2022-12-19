@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QAbstractItemView
 from PySide6.QtCore import Slot
 
 
@@ -11,6 +11,8 @@ from gui.expression_editor import ExpressionCalc
 class ExpressionList(ListWidget):
     def __init__(self, parent: QWidget=None, **kwargs):
         super(ExpressionList, self).__init__(parent, **kwargs)
+        self.setIconSize(QSize(12, 12))
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
 
     def initialize(self, menu: Menu):
         self.setEnabled(False)
@@ -18,7 +20,15 @@ class ExpressionList(ListWidget):
 
     def setEnabled(self, arg__1: bool) -> None:
         return super().setEnabled(arg__1)
-    
+
+    def set_flags(self, item: QListWidgetItem):
+        item.setFlags(
+                item.flags() | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled |
+                Qt.ItemFlag.ItemIsUserCheckable
+            )
+        item.setCheckState(Qt.CheckState.Unchecked)
+        return item
+
     @Slot()
     def add_item(self, user_vars: list=[], domains: dict={}, size_hint: list=[434, 32]) -> None:
         editor = ExpressionCalc(
@@ -29,6 +39,7 @@ class ExpressionList(ListWidget):
 
         row = self.count()
         if editor.expression:
+            self.set_flags(editor.expression)
             self.insert_item(item=editor.expression, row=row, size_hint=size_hint)
 
     @Slot()
@@ -41,6 +52,7 @@ class ExpressionList(ListWidget):
         editor.exec()
         
         if editor.expression:
+            self.set_flags(editor.expression)
             size_hint = [self.sizeHintForColumn(0), self.sizeHintForRow(0)]
             self.insert_item(item=editor.expression, row=self.currentRow(), size_hint=size_hint)
 
@@ -53,6 +65,10 @@ class PerformanceMap(ExpressionList):
     def __init__(self, parent: QWidget=None, **kwargs):
         super(PerformanceMap, self).__init__(parent, **kwargs)
         self.setWordWrap(False)
+
+    def set_flags(self, item: QListWidgetItem):
+        item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+        return item
 
     @Slot()
     def add_item(self) -> None:

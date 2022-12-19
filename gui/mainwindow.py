@@ -148,14 +148,15 @@ class MainWindow(QMainWindow):
 
         if self.template_file[0]:
             expressions = []
+
             for row in range(self.tabs[0].expression_list.count()):
                 var, exp = (t.strip() for t in self.tabs[0].expression_list.item(row).text().split('='))
                 desc = self.tabs[0].expression_list.item(row).toolTip()
                 expressions.append({'Variable': var, 'Expression': exp, 'Description': desc})
+
             with open(self.template_file[0], 'w') as tmp:
                 json_data = {'expressions': expressions}
                 json.dump(json_data, tmp)
-            self.tabs[0].update(templates=json_data)
 
     @Slot()
     def load_template_file(self, filter: str='', title: str='Load file', directory='\\'):
@@ -166,7 +167,7 @@ class MainWindow(QMainWindow):
             with open(self.template_file[0], 'r') as tmp:
                 try:
                     template = json.load(tmp)
-                    self.tabs[0].setup(templates=template)
+                    self.tabs[0].load_template(**template)
                 except json.JSONDecodeError:
                     msg = 'Invalid format of template file.'
                     ex = 'Invalid format'

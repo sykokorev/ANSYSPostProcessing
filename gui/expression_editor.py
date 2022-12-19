@@ -1,11 +1,15 @@
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QListWidgetItem, QTextEdit,
+    QWidget, QListWidgetItem, QLineEdit,
     QDialog, QMenuBar
 )
-from PySide6.QtGui import QAction, QCloseEvent, QFont
+from PySide6.QtGui import (
+    QAction, QCloseEvent, QFont,
+    QRegularExpressionValidator,
+    QKeyEvent, Qt
+)
 
 
-from gui.gui import PushButton, GridLayout
+from gui.gui import PushButton, GridLayout, Label
 from utils.consts import *
 
 
@@ -13,33 +17,62 @@ class ExpressionCalc(QDialog):
     def __init__(self, parent: QWidget=None, **kwargs):
         super(ExpressionCalc, self).__init__(parent)
 
-        self.resize(600, 300)
+        self.resize(600, 150)
         self.setWindowTitle("Expression Editor")
         domains = kwargs.get('domains', {})
         self.expression = kwargs.get('expression')
+        self.description = kwargs.get('description')
         self.user_vars = kwargs.get('user_variables', None)
 
         if not self.expression:
             self.expression = QListWidgetItem()
             self.expression.setText('')
 
+        if not self.description:
+            self.description = QListWidgetItem()
+            self.description.setText('')
+
         solution_vars = SOLUTION_KEYS
         turbo_vars = TURBO_KEYS
         functions = FUNCTION_KEYS
 
-        self.editor = QTextEdit()
+        self.editor = QLineEdit()
         self.editor.setText(self.expression.text())
         self.editor.setFont(QFont(*MSG_FONT))
-        self.ok_btn = PushButton(text='Ok')
+        self.editor.setPlaceholderText("$variable_name=expression")
+        reg = "[$]{1}[a-zA-Z]+[_0-9]*[=]{1}[a-zA-Z()\"\s\*/\+\-0-9,\.$]+"
+        validator = QRegularExpressionValidator(reg)
+        self.editor.setValidator(validator)
+
+        self.qtext = QLineEdit()
+        self.qtext.setText(self.description.text())
+        self.qtext.setFont(QFont(*MSG_FONT))
+
+        self.ok_btn = PushButton(text='Ok', size=[128, 32])
         self.ok_btn.clicked.connect(self.save_and_close)
-        self.cancel_btn = PushButton(text="Cancel")
-        self.cancel_btn.clicked.connect(self.close)
+        self.cancel_btn = PushButton(text="Cancel", size=[128, 32])
+        self.cancel_btn.clicked.connect(self.close_unsaved)
+        btn_layout = GridLayout(widgets=[
+            ['widget', QWidget(), [0, 0]],
+            ['widget', self.ok_btn, [0, 1]],
+            ['widget', self.cancel_btn, [0, 2]],
+            ['widget', QWidget(), [0, 3]]
+        ], col_stretch=[[0, 1], [3, 1]])
+        btn_layout.setSpacing(5)
+
+        text = "Example: $Density=massFlowAve(\"Density\",\"DomainName\")"
+        example = Label(text=text, font=LIST_FONT)
 
         layout = GridLayout(widgets=[
-            ['widget', self.editor, [0, 0, 1, 2]], 
-            ['widget', self.ok_btn, [1, 0]],
-            ['widget', self.cancel_btn, [1, 1]]
+            ['widget', Label(text='Expression:'), [0, 0]],
+            ['widget', Label(text='Description:'), [1, 0]],
+            ['widget', self.editor, [0, 1]],
+            ['widget', self.qtext, [1, 1]],
+            ['layout', btn_layout, [2, 0, 1, 2]],
+            ['widget', example, [5, 0, 1, 2]]
         ])
+        layout.setHorizontalSpacing(5)
+        layout.setVerticalSpacing(5)
 
         central_widget = QWidget()
         central_widget.setLayout(layout)
@@ -91,25 +124,28 @@ class ExpressionCalc(QDialog):
             self.turbo_submenu.addAction(action)
 
     def save_and_close(self):
-        if self.editor.toPlainText():
-            text = self.editor.toPlainText().strip()
+        if self.editor.text():
+            text = self.editor.text().strip()
             self.expression.setText(text)
+            self.expression.setToolTip(self.qtext.text())
         else:
             self.expression = None
+        self.close()
+
+    def close_unsaved(self):
+        self.expression = None
+        self.editor.setText('')
         self.close()
 
     def paste_vars(self, action):
         text = action.text()
-        self.editor.insertPlainText(text)
+        self.editor.insert(text)
     
     def paste_func(self, action):
         text = f'"{action.text()}"'
-        self.editor.insertPlainText(text)
+        self.editor.insert(text)
 
-    def closeEvent(self, arg__1: QCloseEvent) -> None:
-        if self.editor.toPlainText():
-            text = self.editor.toPlainText()
-            self.expression.setText(text)
-        else:
-            self.expression = None
-        self.close()
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() == Qt.Key.Key_Escape:
+            self.close_unsaved()
+        return super().keyPressEvent(event)

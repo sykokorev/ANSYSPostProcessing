@@ -207,6 +207,9 @@ class ListWidget(QListWidget):
         if isinstance(menu, Menu):
             self.__context_menu = menu
 
+    def clicked(self, item: QListWidgetItem):
+        print(item.text())
+
     def set_items(self, items: list, size_hint: list=None):
         if hasattr(items, '__iter__'):
             for item in items:
@@ -214,9 +217,6 @@ class ListWidget(QListWidget):
                 wi.setText(item[0])
                 if size_hint:
                     wi.setSizeHint(QSize(*size_hint))
-                wi.setFlags(
-                    Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
-                )
                 if item[1]:
                     wi.setToolTip(item[1])
                 self.addItem(wi)
@@ -232,7 +232,6 @@ class ListWidget(QListWidget):
             wi.setToolTip(item[1])
         if size_hint:
             wi.setSizeHint(QSize(*size_hint))
-        wi.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
         col_size = self.sizeHintForColumn(0)
         if self.width() > col_size:
             wi.setSizeHint(QSize(self.width(), self.sizeHintForRow(0)))
@@ -249,44 +248,15 @@ class ListWidget(QListWidget):
     def insert_item(self, item: QListWidgetItem, row: int, size_hint: list=[]) -> QListWidgetItem:
         if isinstance(item, QListWidgetItem):
             item.setSizeHint(QSize(*size_hint))
-            item.setFlags(
-                Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
-            )
             self.insertItem(row, item)
             return self.item(row)
 
         return None
 
-    def mousePressEvent(self, event: QMouseEvent) -> None:
-
-        if event.buttons() == Qt.LeftButton:
-            drag = QDrag(self)
-            mime = QMimeData()
-            drag.setMimeData(mime)
-            drag.exec(Qt.MoveAction)
-
-        return super().mousePressEvent(event)
-
     def contextMenuEvent(self, arg__1: QContextMenuEvent) -> None:
         if self.__context_menu:
             self.__context_menu.exec(self.mapToGlobal(arg__1.pos()))
         return super().contextMenuEvent(arg__1)
-
-    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
-        event.accept()
-
-    def dragMoveEvent(self, event: QDragEnterEvent) -> None:
-        event.accept()
-
-    def dropEvent(self, event: QDropEvent) -> None:
-        pos = event.pos()
-        event.setDropAction(Qt.MoveAction)
-        current_row = self.currentRow()
-        current_item = self.item(current_row)
-        item = self.itemAt(pos.x(), pos.y())
-        row = self.row(item)
-        self.insertItem(row, current_item)
-        event.accept()
 
     @Slot()
     def item_up(self) -> None:

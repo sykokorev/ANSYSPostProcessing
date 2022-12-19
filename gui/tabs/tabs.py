@@ -70,11 +70,11 @@ class InitTab(QGridLayout):
             'Add curve': self.add_item
         }
         expression_actions = {
+            'Add expression': self.add_item,
+            'Edit expression': self.edit_item,
             'Move up': self.item_position_changed,
             'Move down': self.item_position_changed,
-            'Edit expression': self.edit_item,
-            'Delete expression': self.expression_list.delete_item,
-            'Add expression': self.add_item
+            'Delete expression': self.expression_list.delete_item
         }
         menu = Menu(actions=expression_actions, parent=self.expression_list)
         self.expression_list.initialize(menu=menu)
@@ -132,10 +132,11 @@ class InitTab(QGridLayout):
         self.inlet_cmbb.set_items(items=self.domains)
         self.outlet_cmbb.set_items(items=self.domains)
         
-    def load(self, **kwargs):
-        expressions = kwargs.get('expressions')
+    def load_template(self, **template):
+        expressions = template.get('expressions')
         if expressions:
-            self.setup(template=expressions)
+            items = [(f'{e["Variable"]} = {e["Expression"]}', e["Description"]) for e in expressions]
+            self.expression_list.update_list(items=items)
 
     def update_user_vars(self):
         user_vars = []
@@ -207,16 +208,13 @@ class InitTab(QGridLayout):
         parent = self.sender().parent()
         sender = self.sender()
 
-        if self.expression_list in (parent, sender):
+        if self.expression_list in (parent, sender) and self.expression_list.count():
             row = self.expression_list.currentRow()
             self.expression_list.edit_item(user_vars=self.user_vars[:row], domains=self.domains)
-        elif self.performance_map in (parent, sender):
-            curve = self.curves_cmbb.currentText()
-            if curve:
-                res = FileDialog(title="Edit curve point", filter="ANSYS result files (*.res)", directory="\\")
-                file = res.open_file()
-                if file[0]:
-                    row = self.performance_map.currentRow()
-                    self.performance_map.set_item(item=(file[0], f'point{row}'))
-                    self.update_curves()
-
+        elif self.performance_map in (parent, sender) and self.curves_cmbb.currentText():
+            res = FileDialog(title="Edit curve point", filter="ANSYS result files (*.res)", directory="\\")
+            file = res.open_file()
+            if file[0]:
+                row = self.performance_map.currentRow()
+                self.performance_map.set_item(item=(file[0], f'point{row}'))
+                self.update_curves()
