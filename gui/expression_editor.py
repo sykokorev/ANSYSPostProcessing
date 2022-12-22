@@ -20,32 +20,29 @@ class ExpressionCalc(QDialog):
         self.resize(600, 150)
         self.setWindowTitle("Expression Editor")
         domains = kwargs.get('domains', {})
-        self.expression = kwargs.get('expression')
-        self.description = kwargs.get('description')
+        self.expression = kwargs.get('expression', QListWidgetItem())
         self.user_vars = kwargs.get('user_variables', None)
 
         if not self.expression:
-            self.expression = QListWidgetItem()
-            self.expression.setText('')
-
-        if not self.description:
-            self.description = QListWidgetItem()
-            self.description.setText('')
+            self.description = ''
+        else:
+            self.description = self.expression.toolTip()
 
         solution_vars = SOLUTION_KEYS
         turbo_vars = TURBO_KEYS
         functions = FUNCTION_KEYS
 
         self.editor = QLineEdit()
+        self.editor.clear()
         self.editor.setText(self.expression.text())
         self.editor.setFont(QFont(*MSG_FONT))
         self.editor.setPlaceholderText("$variable_name=expression")
-        reg = "[$]{1}[a-zA-Z]+[_0-9]*[=]{1}[a-zA-Z()\"\s\*/\+\-0-9,\.$]+"
-        validator = QRegularExpressionValidator(reg)
-        self.editor.setValidator(validator)
+        # reg = "[$]{1}[a-zA-Z_]+[_0-9_]*[=]{1}[a-zA-Z()\"\s\*/\+\-0-9,\.$]+"
+        # validator = QRegularExpressionValidator(reg)
+        # self.editor.setValidator(validator)
 
         self.qtext = QLineEdit()
-        self.qtext.setText(self.description.text())
+        self.qtext.setText(self.description)
         self.qtext.setFont(QFont(*MSG_FONT))
 
         self.ok_btn = PushButton(text='Ok', size=[128, 32])

@@ -3,7 +3,7 @@ import json
 from PySide6.QtWidgets import (
     QMainWindow, QGridLayout, QWidget
 )
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Slot, Qt
 
 
 from utils.consts import *
@@ -13,7 +13,7 @@ from gui.gui import *
 
 class MainWindow(QMainWindow):
 
-    def __init__(self, tabs, buttons, **kwargs):
+    def __init__(self, tabs, **kwargs):
         super(MainWindow, self).__init__()
 
         TAB_DICT = {
@@ -24,15 +24,19 @@ class MainWindow(QMainWindow):
             'Presentation': QWidget()
         }
 
+        self.expressions = None
+
         self.tabs = tabs
         self.domains = None
         self.out_file = None
         self.user_vars = None
         self.template_file = None
         self.perfomance_map = {}
+        self.res_files = ('', '')
+        self.file_save_directory = None
 
         size = kwargs.get('size', [1280, 720])
-        title = kwargs.get('Title', '')
+        title = kwargs.get('title', '')
         empty = QWidget()
 
         self.setWindowTitle(title)
@@ -40,6 +44,8 @@ class MainWindow(QMainWindow):
 
         self.widgets = []
         self.main_layout = QGridLayout()
+        self.main_layout.setVerticalSpacing(10)
+        self.main_layout.setHorizontalSpacing(10)
 
         tabs_setting = dict((t.title, t.main_layout) for t in self.tabs)
         tabs_setting.update(TAB_DICT)
@@ -54,6 +60,8 @@ class MainWindow(QMainWindow):
                 ['widget', empty, [len(self.buttons.buttons()), 0]]
             ]
         )
+        self.buttons_layout.setVerticalSpacing(20)
+        self.buttons_layout.setHorizontalSpacing(10)
 
         self.main_layout.addWidget(self.tab_widget, 0, 0)
         self.main_layout.addLayout(self.buttons_layout, 0, 1)
@@ -62,12 +70,14 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.main_widget)
 
     def controlButtonUI(self):
+        btn_size = [160, 32]
         btn_settings = [
-            {'text': 'Load out file'},
-            {'text': 'Load template'},
-            {'text': 'Load res files direcotry', 'enable': False},
-            {'text': 'Save...', 'enable': False},
-            {'text': 'Save template'}
+            {'text': 'Load out file', 'size': btn_size},
+            {'text': 'Load template', 'size': btn_size},
+            {'text': 'Save template', 'size': btn_size},
+            {'text': 'Add res files', 'enable': False, 'size': btn_size},
+            {'text': 'Save to...', 'enable': False, 'size': btn_size},
+            {'text': 'Run', 'enable': False, 'size': btn_size}
         ]
         buttons = []
         for btn in btn_settings:
@@ -76,16 +86,19 @@ class MainWindow(QMainWindow):
         buttons[0].clicked.connect(
             lambda: self.open_file(filter='Ansys out file (*.out)')
         )
-        buttons[0].clicked.connect(self.set_enabled)
         buttons[1].clicked.connect(
             lambda: self.load_template_file(title="Load template", directory="\\", filter="Template file (*.tmp)")
         )
-        buttons[2].clicked.connect(lambda: self.open_files(ext='res', title='Open res file directory'))
-        buttons[3].clicked.connect(lambda: self.open_directory(title="Save to Directory", directory="\\"))
-        buttons[4].clicked.connect(
+        buttons[2].clicked.connect(
             lambda: self.save_template_as(title="Save template as", directory="\\", filter="Template files (*.tmp)")
         )
+        buttons[3].clicked.connect(
+            lambda: self.open_files(ext='res', title='Add ANSYS result files', filter='ANSYS result files (*.res)')
+        )
+        buttons[4].clicked.connect(lambda: self.open_directory(title="Save to Directory", directory="\\"))
+        buttons[5].clicked.connect(self.run)
         qbtns = ButtonGroup(buttons=buttons)
+        self.set_enabled(qbtns, True)
         return qbtns
 
     def initialize(self, instance: object) -> None:
@@ -105,13 +118,9 @@ class MainWindow(QMainWindow):
             pass
 
     @Slot()
-    def set_enabled(self):
-        if self.out_file[0]:
-            for btn in self.buttons.buttons()[1:]:
-                btn.setEnabled(True)
-        else:
-            for btn in self.buttons.buttons()[1:]:
-                btn.setEnabled(False)
+    def set_enabled(self, buttons: QButtonGroup, enabled: bool=True):
+        for btn in buttons.buttons():
+            btn.setEnabled(enabled)
 
     @Slot()
     def open_directory(self, title: str="Open directory", directory: str="\\"):
@@ -123,15 +132,8 @@ class MainWindow(QMainWindow):
     def open_files(self, ext: str='', filter: str=None, title: str='Open File', directory: str='\\'):
         open_files = FileDialog(title=title, filter=filter, directory=directory)
         ext = ext
+        self.res_files = open_files.open_files()
 
-        try:
-            self.res_file_directory = os.path.abspath(open_files.open_direcory())
-        except TypeError as ex:
-            pass
-        try:
-            self.res_files = get_files(ext=ext, directory=self.res_file_directory)
-        except FileNotFoundError as ex:
-            pass
 
     @Slot()
     def open_file(self, filter: str='', title='Open file', directory: str='\\'):
@@ -152,7 +154,8 @@ class MainWindow(QMainWindow):
             for row in range(self.tabs[0].expression_list.count()):
                 var, exp = (t.strip() for t in self.tabs[0].expression_list.item(row).text().split('='))
                 desc = self.tabs[0].expression_list.item(row).toolTip()
-                expressions.append({'Variable': var, 'Expression': exp, 'Description': desc})
+                check_state = 0 if self.tabs[0].expression_list.item(row).checkState() == Qt.CheckState.Unchecked else 1
+                expressions.append({'Variable': var, 'Expression': exp, 'Description': desc, 'CheckState': check_state})
 
             with open(self.template_file[0], 'w') as tmp:
                 json_data = {'expressions': expressions}
@@ -188,3 +191,19 @@ class MainWindow(QMainWindow):
                 diag.exec()
         except FileNotFoundError as ex:
             pass
+
+    def run(self):
+        # Get expressions
+        row = self.tabs[0].expression_list.count()
+        if self.tabs[0].expression_check.checkState() == Qt.CheckState.Checked:
+            self.expressions = [
+                {
+                    'expression': self.tabs[0].expression_list.item(i).text(),
+                    'description': self.tabs[0].expression_list.item(i).toolTip(),
+                    'add': True if self.tabs[0].expression_list.item(i).checkState() == Qt.CheckState.Checked else False
+                } for i in range(row)
+            ]
+        else:
+            self.expressions = None
+        self.domains = self.tabs[0].domains
+        self.close()

@@ -236,14 +236,10 @@ class ListWidget(QListWidget):
         if self.width() > col_size:
             wi.setSizeHint(QSize(self.width(), self.sizeHintForRow(0)))
 
-    def set_item(self, item: tuple):
+    def set_item(self, item: QListWidgetItem):
         row = self.currentRow()
         self.takeItem(row)
-        wi = QListWidgetItem()
-        wi.setText(item[0])
-        if item[1]:
-            wi.setToolTip(item[1])
-        self.insertItem(row, wi)
+        self.insertItem(row, item)
 
     def insert_item(self, item: QListWidgetItem, row: int, size_hint: list=[]) -> QListWidgetItem:
         if isinstance(item, QListWidgetItem):

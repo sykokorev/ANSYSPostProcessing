@@ -63,11 +63,11 @@ class InitTab(QGridLayout):
     def initialize(self):
 
         performance_map_actions = {
+            'Add curve': self.add_item,
+            'Edit point': self.edit_item,
             'Move up': self.item_position_changed,
             'Move down': self.item_position_changed,
-            'Edit point': self.edit_item,
-            'Delete point': self.performance_map.delete_item,
-            'Add curve': self.add_item
+            'Delete point': self.performance_map.delete_item
         }
         expression_actions = {
             'Add expression': self.add_item,
@@ -135,7 +135,8 @@ class InitTab(QGridLayout):
     def load_template(self, **template):
         expressions = template.get('expressions')
         if expressions:
-            items = [(f'{e["Variable"]} = {e["Expression"]}', e["Description"]) for e in expressions]
+            self.user_vars = [e['Variable'] for e in expressions]
+            items = [(f'{e["Variable"]} = {e["Expression"]}', e["Description"], e["CheckState"]) for e in expressions]
             self.expression_list.update_list(items=items)
 
     def update_user_vars(self):
@@ -216,5 +217,9 @@ class InitTab(QGridLayout):
             file = res.open_file()
             if file[0]:
                 row = self.performance_map.currentRow()
-                self.performance_map.set_item(item=(file[0], f'point{row}'))
+                item = QListWidgetItem()
+                curve = self.curves_cmbb.currentText()
+                item.setText(file[0])
+                item.setToolTip(f'Curve: {curve}\tPoint:{row}')
+                self.performance_map.set_item(item=item)
                 self.update_curves()

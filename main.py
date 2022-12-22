@@ -1,15 +1,23 @@
 import os
 import ctypes
 import sys
+import re
 
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication
 
 
 from utils.parse_out import *
-from utils.generate_cse import Table
-# from gui.gui import MainWindow, MessageBox
+from utils.generate_cse import *
 from gui.mainwindow import MainWindow
 from gui.tabs.tabs import InitTab
+from utils.consts import HERE
+
+
+def convert_path(path: str):
+    sep = os.path.sep
+    if sep != '/':
+        path = path.replace(os.path.sep, '/')
+    return path
 
 
 if __name__ == "__main__":
@@ -37,24 +45,43 @@ if __name__ == "__main__":
     window.show()
     app.exec()
 
-    # output_directory = window.file_save_directory
-    # try:
-    #     cst_file = os.path.join(output_directory, 'out.cst')
-    # except TypeError:
-    #     msgbox = MessageBox(information='Output directory has noe been choisen', title='Error Message')
-    #     msgbox.show()
-    #     msgbox.exec()
-    #     sys.exit(-1)
+    save_to = (HERE + os.sep + 'post') if not (d := window.file_save_directory) else d
+    res_files = [] if not (f:=window.res_files[0]) else f
+    expressions = [] if not (exp:=window.expressions) else [e['expression'] for e in exp]
+    header = [] if not (header:=window.expressions) else [
+        h['expression'].split('=')[0].strip().lstrip('$') for h in header
+    ]
+    variables = [f'${h}' for h in header]
+    desc = [] if not (d:=window.expressions)  else [di['description'] for di in d]
+    domains = [] if not (d:=window.domains) else list(d.keys())
 
-    # expressions = [(exp.split(sep='=')[0].strip(), exp.split(sep='=')[1].strip()) for exp in window.get_expressions()]
-    # expressions = dict(expressions)
-    # table_cst = Table(list(expressions.values()), table_name='ACC')
+    output_dir = os.path.abspath(save_to)
+    cse = os.path.join(output_dir, 'output.cse')
+    csv = os.path.join(output_dir, 'output.csv')
+    csv = convert_path(csv)
 
-    # table_cst.gen_expression()
-    # code_cst = table_cst.gen_cse_code()
+    array_var_name = 'files'
+    perl = PerlHandler()
+    perl.code += f'!\tmy $f (@{array_var_name})' + '{\n'
+    perl.code += '> load filename = $f, force_reload=true\n> update\n'
+    array = GenArray(array_var_name)
 
-    # with open(cst_file, 'w') as cse:
-    #     for case in window.res_files:
-    #         cse.write(f'>load filename={case}, force_reload=true\n>update\n')
-    #         cse.write(code_cst)
-        
+    generators = {
+        array: res_files,
+        perl: expressions
+    }
+
+
+    coder = CodeGen(list(generators.keys()))
+    
+    code = coder.code(list(generators.values()))
+    cse_out = cse_generator(outfile=csv, header=header, code=code, domains=domains, vars=variables)
+
+    if not (path:=os.path.exists(os.path.split(cse)[0])):
+        try:
+            os.mkdir(path)
+        except PermissionError:
+            sys.exit(-1)
+
+    with open(cse, 'w') as f:
+        f.write(cse_out)

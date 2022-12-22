@@ -11,7 +11,7 @@ from gui.expression_editor import ExpressionCalc
 class ExpressionList(ListWidget):
     def __init__(self, parent: QWidget=None, **kwargs):
         super(ExpressionList, self).__init__(parent, **kwargs)
-        self.setIconSize(QSize(12, 12))
+        self.setIconSize(QSize(24, 24))
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
 
     def initialize(self, menu: Menu):
@@ -21,12 +21,12 @@ class ExpressionList(ListWidget):
     def setEnabled(self, arg__1: bool) -> None:
         return super().setEnabled(arg__1)
 
-    def set_flags(self, item: QListWidgetItem):
+    def set_flags(self, item: QListWidgetItem, check_state: Qt.CheckState=Qt.CheckState.Checked):
         item.setFlags(
-                item.flags() | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled |
+                item.flags() | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled | 
                 Qt.ItemFlag.ItemIsUserCheckable
-            )
-        item.setCheckState(Qt.CheckState.Unchecked)
+        )
+        item.setCheckState(check_state)
         return item
 
     @Slot()
@@ -53,12 +53,27 @@ class ExpressionList(ListWidget):
         
         if editor.expression:
             self.set_flags(editor.expression)
-            size_hint = [self.sizeHintForColumn(0), self.sizeHintForRow(0)]
-            self.insert_item(item=editor.expression, row=self.currentRow(), size_hint=size_hint)
+            self.insert_item(item=editor.expression, row=self.currentRow())
 
     def update_list(self, items: list):
         self.clear()
-        self.set_items(items=items)
+        # self.set_items(items=items)
+
+        for i, it in enumerate(items):
+            item = QListWidgetItem(self)
+            item.setText(it[0])
+            item.setToolTip(it[1])
+            item.setCheckState(CS[it[2]])
+            self.insert_item(item=item, row=i)
+
+        for row in range(self.count()):
+            item = self.item(row)
+            try:
+                check_state = items[row][2]
+            except:
+                check_state = 0
+            check_state = Qt.CheckState.Checked if check_state else Qt.CheckState.Unchecked
+            self.set_flags(item=item, check_state=check_state)
 
 
 class PerformanceMap(ExpressionList):
@@ -77,6 +92,14 @@ class PerformanceMap(ExpressionList):
     @Slot()
     def edit_item(self) -> None:
         pass
+
+    @Slot()
+    def update_list(self, items: list):
+        self.clear()
+        self.set_items(items=items)
+        for row in range(self.count()):
+            item = self.item(row)
+            self.set_flags(item)
 
 
 class ExpressionCheckBox(CheckBox):
