@@ -31,9 +31,11 @@ class MainWindow(QMainWindow):
         self.out_file = None
         self.user_vars = None
         self.template_file = None
-        self.perfomance_map = {}
+        self.performance_map = {}
         self.res_files = ('', '')
         self.file_save_directory = None
+        self.inlet = None
+        self.outlet = None
 
         size = kwargs.get('size', [1280, 720])
         title = kwargs.get('title', '')
@@ -206,4 +208,10 @@ class MainWindow(QMainWindow):
         else:
             self.expressions = None
         self.domains = self.tabs[0].domains
+
+        if self.tabs[0].performance_check.checkState() == Qt.CheckState.Checked:
+            self.inlet = self.tabs[0].inlet_cmbb.currentText()
+            self.outlet = self.tabs[0].outlet_cmbb.currentText()
+            self.performance_map = self.tabs[0].curves
+
         self.close()

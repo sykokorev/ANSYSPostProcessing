@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QGridLayout, QWidget, QAbstractItemView
 )
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Slot, QRegularExpression
 
 
 from utils.consts import *
@@ -88,6 +88,8 @@ class InitTab(QGridLayout):
         self.expression_list.itemDoubleClicked.connect(self.edit_item)
         self.performance_map.itemDoubleClicked.connect(self.edit_item)
         self.curves_cmbb.currentIndexChanged.connect(self.update_performance_map)
+        self.inlet_cmbb.currentTextChanged.connect(self.update_curves)
+        self.outlet_cmbb.currentTextChanged.connect(self.update_curves)
 
         self.expression_check.stateChanged.connect(
             lambda: self.expression_check.update_state(widget=self.expression_list)
@@ -147,17 +149,32 @@ class InitTab(QGridLayout):
 
     def update_performance_map(self, row: int):
         curve = self.curves_cmbb.itemText(row)
-        files = self.curves.get(curve, None)
+        data = self.curves.get(curve, None)
+        if data:
+            inlet = data['inlet']
+            outlet = data['outlet']
+            reg = f'[\s]*{inlet}[\s]*'
+            idx = self.inlet_cmbb.findText(reg, Qt.MatchFlag.MatchRegularExpression)
+            if idx >= 0:
+                self.inlet_cmbb.setCurrentIndex(idx)
+            reg = f'[\s]*{outlet}[\s]*'
+            idx = self.outlet_cmbb.findText(reg, Qt.MatchFlag.MatchRegularExpression)
+            if idx >= 0:
+                self.outlet_cmbb.setCurrentIndex(idx)
 
-        if not files:
-            items = ('', '')
-        else:
-            items = [(f, '') for f in files]
-            self.performance_map.update_list(items=items)
+            if not data['files']:
+                items = ('', '')
+            else:
+                items = [(f, '') for f in data['files']]
+                self.performance_map.update_list(items=items)
 
+    @Slot()
     def update_curves(self):
         curve = self.curves_cmbb.currentText()
-        self.curves[curve] = [self.performance_map.item(row).text() for row in range(self.performance_map.count())]
+        if curve:
+            self.curves[curve] = {'inlet': self.inlet_cmbb.currentText().strip(),
+                'outlet': self.outlet_cmbb.currentText().strip(),
+                'files': [self.performance_map.item(row).text() for row in range(self.performance_map.count())]}
 
     @Slot()
     def item_position_changed(self):

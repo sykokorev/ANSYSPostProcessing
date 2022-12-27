@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 
 from utils.parse_out import *
-from utils.generate_cse import *
+from utils.cse_generator import *
 from gui.mainwindow import MainWindow
 from gui.tabs.tabs import InitTab
 from utils.consts import HERE
@@ -44,44 +44,75 @@ if __name__ == "__main__":
 
     window.show()
     app.exec()
-
+    
     save_to = (HERE + os.sep + 'post') if not (d := window.file_save_directory) else d
+    output_dir = os.path.abspath(save_to)    
+
+    cse_code = CodeGenerator()
+
     res_files = [] if not (f:=window.res_files[0]) else f
     expressions = [] if not (exp:=window.expressions) else [e['expression'] for e in exp]
     header = [] if not (header:=window.expressions) else [
         h['expression'].split('=')[0].strip().lstrip('$') for h in header
     ]
     variables = [f'${h}' for h in header]
+    var_format = ['%.5f'] * len(variables)
     desc = [] if not (d:=window.expressions)  else [di['description'] for di in d]
     domains = [] if not (d:=window.domains) else list(d.keys())
 
-    output_dir = os.path.abspath(save_to)
     cse = os.path.join(output_dir, 'output.cse')
     csv = os.path.join(output_dir, 'output.csv')
     csv = convert_path(csv)
+    cse = convert_path(cse)
 
-    array_var_name = 'files'
-    perl = PerlHandler()
-    perl.code += f'!\tmy $f (@{array_var_name})' + '{\n'
-    perl.code += '> load filename = $f, force_reload=true\n> update\n'
-    array = GenArray(array_var_name)
+    res_files_array_name = 'files'
+    filename = '$f'
 
-    generators = {
-        array: res_files,
-        perl: expressions
-    }
+    code = cse_code.gen_init(domains=domains)
+    # Compute efficiency subroutine
+    code += cse_code.perl_eff_subroutine()
+    # Compute Expressions
+    if res_files:
+        code += cse_code.turbo_init()
+        code += cse_code.gen_perl_open_file(filename=csv)
+        code += cse_code.write_to_file(code='"file,'+str(header)[1:-1].replace("'",'')+'\\n"')
+        code += cse_code.gen_perl_array(variables=res_files, varname=res_files_array_name)
 
+        code_inside_loop = cse_code.load_file(filename=filename)
+        code_inside_loop += cse_code.gen_perl_expressions(expressions=expressions)
+        code_to_write = f'"%s,' + str(var_format)[1:-1].replace("'", '') + f'\\n", basename({filename}),' + str(variables)[1:-1].replace("'", '')
+        code_inside_loop += cse_code.write_to_file(code=code_to_write)
+        code += cse_code.gen_perl_loop(code=code_inside_loop, array_var=res_files_array_name)
 
-    coder = CodeGen(list(generators.keys()))
-    
-    code = coder.code(list(generators.values()))
-    cse_out = cse_generator(outfile=csv, header=header, code=code, domains=domains, vars=variables)
+    # performance map code
+    pm_csv = os.path.join(output_dir, 'performance_map.csv')
+    pm_csv = convert_path(pm_csv)
 
-    if not (path:=os.path.exists(os.path.split(cse)[0])):
+    performance_map = window.performance_map
+    if performance_map:
+        code += cse_code.load_domains(domains=domains)
+        code += cse_code.turbo_init()
+        code += cse_code.gen_perl_open_file(filename=pm_csv)
+        code_to_write = '"CurveName, Inlet, Outlet, Gcorr, Pi_ts, Pi_tt, Eff\\n"'
+        code += cse_code.write_to_file(code=code_to_write)
+        for curve, data in performance_map.items():
+            files = [] if not (f:=data['files']) else f
+            inlet = '' if not (i:=data['inlet']) else i
+            outlet = '' if not (o:=data['outlet']) else o
+            code += cse_code.gen_perl_array(variables=files, varname='files')
+            code_inside_loop = cse_code.load_file(filename='$f')
+            code_inside_loop += cse_code.pm_expressions(curve=curve, 
+                inlet=inlet, outlet=outlet)
+            code_to_write = f'"%s, %s, %s, %.5f, %.5f, %.5f\\n", "{curve}", "{inlet}", "{outlet}", $massFlow, $Pist, $Pitt, $eff'
+            code_inside_loop += cse_code.write_to_file(code=code_to_write)
+            code += cse_code.gen_perl_loop(code=code_inside_loop, array_var='files')
+        code += cse_code.gen_perl_close_file()
+
+    if not os.path.exists(os.path.split(cse)[0]):
         try:
-            os.mkdir(path)
+            os.mkdir(os.path.split(cse)[0])
         except PermissionError:
             sys.exit(-1)
 
     with open(cse, 'w') as f:
-        f.write(cse_out)
+        f.write(code)

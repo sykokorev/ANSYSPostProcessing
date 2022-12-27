@@ -22,6 +22,13 @@ def cse_generator(domains, outfile, header, code, vars):
     return out
 
 
+def load_file():
+    return '> load filename = $f, force_reload=true\n'
+
+
+def turbo_init():
+    return '> update\n> turbo initn\n> turbo more_vars\n'
+
 
 # Abstract class
 
@@ -61,8 +68,31 @@ class GenArray:
 
 
 class PerformanceMap:
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.code = ''
+        self.__inlet = kwargs.get('inlet', '')
+        self.__outlet = kwargs.get('outlet', '')
 
-    def gen(self, code):
-        pass
+    @property
+    def inlet(self):
+        return self.__inlet
+    
+    @property
+    def outlet(self):
+        return self.__outlet
+
+    @inlet.setter
+    def inlet(self, inlet):
+        self.__inlet = inlet
+
+    @outlet.setter
+    def outlet(self, outlet):
+        self.__outlet = outlet
+
+    def gen(self, curve) -> str:
+        self.code += f'!\tmy $curve = {curve}\n'
+        self.code += f'!\tmy $Pist = areaAve("Pressure", {self.outlet}) / massFlowAve("Total Pressure in stn Frame", "{self.inlet}");\n'
+        self.code += f'!\tmy $massFlow = massFlow("{self.inlet}");\n'
+        self.code += f'!\tmy $T1tot = massFlowAve("Total Temperature in stn Frame","{self.inlet}");\n'
+        self.code += f'!\tmy $T2tot = massFlowAve("Total Temperature in stn Frame","{self.outlet}");\n'
+        return self.code
