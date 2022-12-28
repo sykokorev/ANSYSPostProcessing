@@ -100,12 +100,12 @@ if __name__ == "__main__":
             inlet = '' if not (i:=data['inlet']) else i
             outlet = '' if not (o:=data['outlet']) else o
             code += cse_code.gen_perl_array(variables=files, varname='files')
-            code_inside_loop = cse_code.load_file(filename='$f')
+            code_inside_loop = cse_code.load_file(filename=filename)
             code_inside_loop += cse_code.pm_expressions(curve=curve, 
                 inlet=inlet, outlet=outlet)
             code_to_write = f'"%s, %s, %s, %.5f, %.5f, %.5f\\n", "{curve}", "{inlet}", "{outlet}", $massFlow, $Pist, $Pitt, $eff'
             code_inside_loop += cse_code.write_to_file(code=code_to_write)
-            code += cse_code.gen_perl_loop(code=code_inside_loop, array_var='files')
+            code += cse_code.gen_perl_loop(code=code_inside_loop, array_var=res_files_array_name)
         code += cse_code.gen_perl_close_file()
 
     if not os.path.exists(os.path.split(cse)[0]):

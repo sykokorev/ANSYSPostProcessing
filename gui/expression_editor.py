@@ -142,6 +142,13 @@ class ExpressionCalc(QDialog):
         text = f'"{action.text()}"'
         self.editor.insert(text)
 
+    def closeEvent(self, arg__1: QCloseEvent) -> None:
+        if not self.editor.text():
+            self.close_unsaved()
+        else:
+            self.save_and_close
+        return super().closeEvent(arg__1)
+
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Escape:
             self.close_unsaved()
